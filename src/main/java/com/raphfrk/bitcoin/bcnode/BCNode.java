@@ -23,8 +23,21 @@
  */
 package com.raphfrk.bitcoin.bcnode;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.Security;
+
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+
+import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
+
 public class BCNode {
-	public static void main( String[] args ) {
-		System.out.println( "Hello World!" );
+	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException {
+		Security.addProvider(new BouncyCastleProvider());
+		MessageDigest d = MessageDigest.getInstance("RIPEMD160", "BC");
+		byte[] arr = ParseUtils.hexStringToBytes("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+		byte[] out = d.digest(arr);
+		System.out.println("Hash: " + ParseUtils.bytesToHexString(out));
 	}
 }

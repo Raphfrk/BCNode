@@ -75,14 +75,61 @@
           </archive>
         </configuration>
       </plugin>
+      <!-- Dependency addition plugin -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>2.0</version>
+        <executions>
+          <execution>
+            <configuration>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>lib/**</exclude>
+                    <exclude>templates/**</exclude>
+                    <exclude>META-INF/*.xml</exclude>
+                    <exclude>META-INF/*.txt</exclude>
+                    <exclude>**/LICENSE</exclude>
+                    <exclude>**/NOTICE</exclude>
+                    <exclude>**/DEPENDENCIES</exclude>
+                    <exclude>**/*.java</exclude>
+                    <exclude>**/*.SF</exclude>
+                    <exclude>**/*.DSA</exclude>
+                  </excludes>
+                </filter>
+                <filter>
+                  <artifact>org.spout:*</artifact>
+                  <includes>
+                    <include>**</include>
+                  </includes>
+                </filter>
+              </filters>
+            </configuration>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
+  <!-- Project dependencies -->
   <dependencies>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>3.8.1</version>
       <scope>test</scope>
+    </dependency>
+    <!-- Included in the final JAR -->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk15on</artifactId>
+      <version>1.47</version>
+      <scope>compile</scope>
     </dependency>
   </dependencies>
 </project>

@@ -6,6 +6,9 @@ out
 target
 *.class
 
+MANIFEST.MF
+dependency-reduced-pom.xml
+
 .project
 .classpath
 .settings
