@@ -21,26 +21,42 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.config;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
-
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
-import com.raphfrk.bitcoin.bcnode.config.Config;
-import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException {
-		System.out.println("Max message size: " + Config.MAX_MESSAGE_SIZE.get());
-		Security.addProvider(new BouncyCastleProvider());
-		MessageDigest d = MessageDigest.getInstance("RIPEMD160", "BC");
-		byte[] arr = ParseUtils.hexStringToBytes("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-		byte[] out = d.digest(arr);
-		System.out.println("Hash: " + ParseUtils.bytesToHexString(out));
-		Config.MAX_MESSAGE_SIZE.set(1234L);
+@SuppressWarnings("rawtypes")
+public class DummyConfigSetup extends ConfigSetup {
+	
+	private final String message;
+	
+	@SuppressWarnings("unchecked")
+	public DummyConfigSetup(String message) {
+		super(null, null, null);
+		this.message = message;
 	}
+
+	@Override
+	public String getKey() {
+		throw new UnsupportedOperationException("Dummy config setups have no keys");
+	}
+
+	@Override
+	public Object getDefaultValue() {
+		return null;
+	}
+
+	@Override
+	public Object get() {
+		throw new UnsupportedOperationException("Dummy config setups have no values");
+	}
+
+	@Override
+	public void set(Object value) {
+		throw new UnsupportedOperationException("Dummy config setups have no values to set");
+	}
+
+	@Override
+	protected String asString(Object value) {
+		return message;
+	}
+
 }

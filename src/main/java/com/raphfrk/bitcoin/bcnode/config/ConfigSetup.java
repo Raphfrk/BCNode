@@ -21,26 +21,48 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.config;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
-
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
-import com.raphfrk.bitcoin.bcnode.config.Config;
-import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException {
-		System.out.println("Max message size: " + Config.MAX_MESSAGE_SIZE.get());
-		Security.addProvider(new BouncyCastleProvider());
-		MessageDigest d = MessageDigest.getInstance("RIPEMD160", "BC");
-		byte[] arr = ParseUtils.hexStringToBytes("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-		byte[] out = d.digest(arr);
-		System.out.println("Hash: " + ParseUtils.bytesToHexString(out));
-		Config.MAX_MESSAGE_SIZE.set(1234L);
+public abstract class ConfigSetup<T> {
+	
+	private final String description;
+	private final String key;
+	private final T value;
+	
+	protected ConfigSetup(String key, T value, String description) {
+		this.description = description;
+		this.key = key;
+		this.value = value;
+	}
+	
+	public abstract T get();
+	
+	public abstract void set(T value);
+	
+	@SuppressWarnings("unchecked")
+	protected String rawAsString(Object value) {
+		return asString((T) value);
+	}
+	
+	protected abstract String asString(T value);
+	
+	public String getDescription() {
+		return description;
+	}
+	
+	public String getKey() {
+		return key;
+	}
+	
+	public T getDefaultValue() {
+		return value;
+	}
+	
+	protected synchronized String getString() {
+		return Config.getInstance().getString(getKey());
+	}
+	
+	protected synchronized void setString(String value) {
+		Config.getInstance().setString(getKey(), value);
 	}
 }

@@ -21,26 +21,34 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.config;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
+public class LongConfigSetup extends ConfigSetup<Long> {
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
-import com.raphfrk.bitcoin.bcnode.config.Config;
-import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException {
-		System.out.println("Max message size: " + Config.MAX_MESSAGE_SIZE.get());
-		Security.addProvider(new BouncyCastleProvider());
-		MessageDigest d = MessageDigest.getInstance("RIPEMD160", "BC");
-		byte[] arr = ParseUtils.hexStringToBytes("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-		byte[] out = d.digest(arr);
-		System.out.println("Hash: " + ParseUtils.bytesToHexString(out));
-		Config.MAX_MESSAGE_SIZE.set(1234L);
+	private Long value;
+	
+	public LongConfigSetup(String key, Long value, String description) {
+		super(key, value, description);
 	}
+	
+	@Override
+	public synchronized Long get() {
+		try {
+			return Long.parseLong(super.getString());
+		} catch (NumberFormatException e) {
+			return getDefaultValue();
+		}
+	}
+
+	@Override
+	public synchronized void set(Long value) {
+		this.value = value;
+		super.setString(asString(value));
+	}
+
+	@Override
+	protected String asString(Long value) {
+		return Long.toString(value);
+	}
+	
 }
