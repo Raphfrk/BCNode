@@ -1,0 +1,7 @@
+# Compiled source #
+###################
+bin
+lib
+out
+target
+*.class
