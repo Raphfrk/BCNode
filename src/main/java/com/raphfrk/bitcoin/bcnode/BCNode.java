@@ -23,24 +23,45 @@
  */
 package com.raphfrk.bitcoin.bcnode;
 
-import java.security.MessageDigest;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Security;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
-import com.raphfrk.bitcoin.bcnode.config.Config;
+import com.raphfrk.bitcoin.bcnode.network.message.Message;
+import com.raphfrk.bitcoin.bcnode.network.streams.ExtendedDataInputStream;
+import com.raphfrk.bitcoin.bcnode.network.streams.ExtendedDataOutputStream;
 import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
 
 public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException {
-		System.out.println("Max message size: " + Config.MAX_MESSAGE_SIZE.get());
+	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException {
 		Security.addProvider(new BouncyCastleProvider());
-		MessageDigest d = MessageDigest.getInstance("RIPEMD160", "BC");
-		byte[] arr = ParseUtils.hexStringToBytes("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-		byte[] out = d.digest(arr);
-		System.out.println("Hash: " + ParseUtils.bytesToHexString(out));
-		Config.MAX_MESSAGE_SIZE.set(1234L);
+		
+		// Test message from wiki
+		byte[] testMessage = ParseUtils.hexStringToBytes(
+				"f9beb4d976657273696f6e0000000000" + 
+				"64000000358d493262ea000001000000" + 
+				"0000000011b2d0500000000001000000" + 
+				"0000000000000000000000000000ffff" + 
+				"00000000000000000000000000000000" + 
+				"0000000000000000ffff000000000000" + 
+				"3b2eb35d8ce617650f2f5361746f7368" + 
+				"693a302e372e322fc03e0300");
+		
+		ExtendedDataInputStream dis = new ExtendedDataInputStream(new ByteArrayInputStream(testMessage));
+		Message m = Message.decodeMessage(0xF9BEB4D9 , dis);
+		
+		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		ExtendedDataOutputStream dos = new ExtendedDataOutputStream(bos);
+		Message.encodeMessage(m, dos);
+		dos.flush();
+		byte[] encoded = bos.toByteArray();
+		System.out.println("Input:   " + ParseUtils.bytesToHexString(testMessage));
+		System.out.println("Encoded: " + ParseUtils.bytesToHexString(encoded));		
 	}
 }

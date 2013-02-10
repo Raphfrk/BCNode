@@ -96,4 +96,21 @@ public class ParseUtils {
 		}
 	}
 	
+	public static byte[] stringToCommandBytes(String s) {
+		char[] commandChars = s.toCharArray();
+		byte[] commandBytes = new byte[12];
+		for (int i = 0; i < commandChars.length; i++) {
+			commandBytes[i] = (byte) commandChars[i];
+		}
+		return commandBytes;
+	}
+	
+	public static String commandBytesToString(byte[] bytes) {
+		char[] commandChars = new char[12];
+		for (int i = 0; i < commandChars.length; i++) {
+			commandChars[i] = (char) (bytes[i] & 0xFF);
+		}
+		return new String(commandChars).trim();
+	}
+	
 }

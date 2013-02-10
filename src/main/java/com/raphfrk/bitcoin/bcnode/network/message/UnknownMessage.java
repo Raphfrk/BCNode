@@ -21,31 +21,33 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.config;
+package com.raphfrk.bitcoin.bcnode.network.message;
 
-public class LongConfigSetup extends ConfigSetup<Long> {
+import org.bouncycastle.util.Arrays;
 
-	private Long value;
+
+public class UnknownMessage extends Message {
 	
-	public LongConfigSetup(String key, Long value, String description) {
-		super(key, value, description);
-		this.value = value;
+	private final byte[] data;
+	private final String command;
+	
+	public UnknownMessage(int magic, String command, byte[] data) {
+		super(magic);
+		this.command = command;
+		this.data = data;
 	}
 	
-	@Override
-	public synchronized Long get() {
-		return value;
-	}
-
-	@Override
-	public synchronized void set(Long value) {
-		this.value = value;
-		super.setString(asString(value));
+	public byte[] getData() {
+		return Arrays.copyOf(data, data.length);
 	}
 
 	@Override
-	protected String asString(Long value) {
-		return Long.toString(value);
+	public String getCommand() {
+		return command;
 	}
-	
+
+	@Override
+	public byte[] serialize() {
+		return getData();
+	}
 }

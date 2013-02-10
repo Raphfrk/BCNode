@@ -21,31 +21,43 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.config;
+package com.raphfrk.bitcoin.bcnode.util;
 
-public class LongConfigSetup extends ConfigSetup<Long> {
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 
-	private Long value;
+public class DigestUtils {
 	
-	public LongConfigSetup(String key, Long value, String description) {
-		super(key, value, description);
-		this.value = value;
-	}
-	
-	@Override
-	public synchronized Long get() {
-		return value;
-	}
-
-	@Override
-	public synchronized void set(Long value) {
-		this.value = value;
-		super.setString(asString(value));
-	}
-
-	@Override
-	protected String asString(Long value) {
-		return Long.toString(value);
+	public static byte[] SHA256(byte[] message) {
+		try {
+			MessageDigest d = MessageDigest.getInstance("SHA-256", "BC");
+			d.reset();
+			return d.digest(message);
+		} catch (NoSuchAlgorithmException e) {
+			return null;
+		} catch (NoSuchProviderException e) {
+			return null;
+		}
 	}
 	
+	public static byte[] doubleSHA256(byte[] message) {
+		return SHA256(message, 2);
+	}
+	
+	public static byte[] SHA256(byte[] message, int n) {
+		try {
+			MessageDigest d = MessageDigest.getInstance("SHA-256", "BC");
+			d.reset();
+			for (int i = 0; i < n; i++) {
+				message = d.digest(message);
+			}
+			return message;
+		} catch (NoSuchAlgorithmException e) {
+			return null;
+		} catch (NoSuchProviderException e) {
+			return null;
+		}
+	}
+
 }
