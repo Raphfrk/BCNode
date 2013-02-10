@@ -1,4 +1,4 @@
-package com.raphfrk.bitcoin;
+package com.raphfrk.bitcoin.bcnode;
 
 /**
  * Hello world!
