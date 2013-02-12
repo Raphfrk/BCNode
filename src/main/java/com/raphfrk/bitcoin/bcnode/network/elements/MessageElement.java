@@ -21,46 +21,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.network.elements;
 
 import java.nio.ByteBuffer;
 
-import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
-
-
-public class UnknownMessage extends Message<UnknownMessage> {
+public interface MessageElement<T extends MessageElement<?>> {
 	
-	private final byte[] data;
-	private final String command;
+	/**
+	 * Encodes the MessageElements and writes it to the byte array at the given offset
+	 * 
+	 * @param buf
+	 */
+	public void put(int version, ByteBuffer buf);
 	
-	public UnknownMessage(int magic, String command, int length, ByteBuffer in) {
-		super(magic);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
-	}
-	
-	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
-	}
-
-	@Override
-	public String getCommand() {
-		return command;
-	}
-
-	@Override
-	public int getLength(int version) {
-		return data.length;
-	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
-	}
+	/**
+	 * Gets the length of this element
+	 * 
+	 * @return
+	 */
+	public int getLength(int version);
 
 }

@@ -23,19 +23,24 @@
  */
 package com.raphfrk.bitcoin.bcnode.network.message;
 
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Set;
 
-import com.raphfrk.bitcoin.bcnode.config.Config;
-import com.raphfrk.bitcoin.bcnode.network.streams.ExtendedDataInputStream;
-import com.raphfrk.bitcoin.bcnode.network.streams.ExtendedDataOutputStream;
+import com.raphfrk.bitcoin.bcnode.network.elements.MessageElement;
+import com.raphfrk.bitcoin.bcnode.util.ByteBufferUtils;
 import com.raphfrk.bitcoin.bcnode.util.DigestUtils;
 import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
 
-public abstract class Message {
+public abstract class Message<T extends Message<?>> implements MessageElement<T> {
+	
+	public static final int PROTOCOL_VERSION = 60002;
+	
+	public static final int MAIN_NETWORK = 0xF9BEB4D9;
+	
+	public static final int SUCCESS = -1;
 	
 	private final int magic;
 	
@@ -69,38 +74,81 @@ public abstract class Message {
 	}
 	
 	/**
-	 * Serializes the message payload
+	 * Serializes the message payload into the buffer
 	 * 
-	 * @return
+	 * @param version the protocol version
+	 * @param buf
 	 */
-	public abstract byte[] serialize();
+	public abstract void put(int version, ByteBuffer buf);
 	
 	/**
-	 * Decodes a message from the given input stream.  The decoder scans until the magic value is reached.
+	 * Gets the length of the message payload
 	 * 
+	 * @param version the protocol version
+	 * @return
+	 */
+	public abstract int getLength(int version);
+	
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		sb.append(getClass().getSimpleName());
+		sb.append(" {");
+		sb.append(getPayloadString());
+		sb.append("}");
+		return sb.toString();
+	}
+	
+	protected abstract String getPayloadString();
+	
+	/**
+	 * Decodes a message from the given ByteBuffer.  The decoder scans until the magic value is reached.  
+	 * Unless a full message is read, only garbage data before the magic value will be consumed. 
+	 * 
+	 * @param version the protocol version
 	 * @param expectedMagicValue the expected magic value for the network
-	 * @param in the InputStream
+	 * @param in the ByteBuffer
 	 * @return
 	 * @throws IOException
 	 */
-	public static Message decodeMessage(int expectedMagicValue, ExtendedDataInputStream in) throws IOException {
-		return decodeMessage(expectedMagicValue, in, null);
+	public static Message<?> decodeMessage(int version, int expectedMagicValue, ByteBuffer in) {
+		return decodeMessage(version, expectedMagicValue, in, null);
 	}
 	
 	/**
-	 * Decodes a message from the given input stream.  The decoder scans until the magic value is reached.
+	 * Decodes a message from the given ByteBuffer.  The decoder scans until the magic value is reached.  
+	 * Unless a full message is read, only garbage data before the magic value will be consumed. 
 	 * 
+	 * @param version the protocol version
 	 * @param expectedMagicValue the expected magic value for the network
-	 * @param in the InputStream
+	 * @param in the ByteBuffer
 	 * @param commandSet a set containing acceptable commands, or null for no restriction
 	 * @return
 	 * @throws IOException
 	 */
-	public static Message decodeMessage(int expectedMagicValue, ExtendedDataInputStream in, Set<String> commandSet) throws IOException {
+	public static Message<?> decodeMessage(int version, int expectedMagicValue, ByteBuffer in, Set<String> commandSet) {
 		int magic = scanForMagicValue(expectedMagicValue, in);
 		
+		if (magic != expectedMagicValue) {
+			return null;
+		}
+		
+		if (in.remaining() < 20) {
+			return null;
+		}
+		
+		int base = in.position();
+
+		in.order(ByteOrder.LITTLE_ENDIAN);
+		int length = in.getInt(base + 16);
+		in.order(ByteOrder.BIG_ENDIAN);
+		
+		if (length < 0 || in.remaining() < 24 + length) {
+			return null;
+		}
+		
 		byte[] commandBytes = new byte[12];
-		in.readFully(commandBytes);
+		in.position(base + 4);
+		in.get(commandBytes);
 		String command = ParseUtils.commandBytesToString(commandBytes);
 		
 		if (commandSet != null && !commandSet.contains(command)) {
@@ -109,54 +157,108 @@ public abstract class Message {
 
 		MessageDecoder decoder = getDecoder(command);
 		
-		long length = in.readIntLE() & 0xFFFFFFFFL;
-		if (length > Config.MAX_MESSAGE_SIZE.get() || length > Integer.MAX_VALUE) {
-			return null;
-		}
-
-		byte[] arr = new byte[4];
-		in.readFully(arr);
-
-		byte[] data = new byte[(int) length];
-		in.readFully(data);
+		byte[] checksum = new byte[4];
+		in.position(base + 20);
+		in.get(checksum);
 		
-		byte[] sha256 = DigestUtils.doubleSHA256(data);
-		if (sha256[0] != arr[0] || sha256[1] != arr[1] || sha256[2] != arr[2] || sha256[3] != arr[3]) {
+		byte[] sha256 = DigestUtils.doubleSHA256(in, base + 24, length);
+		
+		ByteBufferUtils.equals(in, base + 20, ByteBuffer.wrap(sha256), 0, 4);
+		
+		in.position(base + 24);
+
+		try {
+			Message<?> m = decoder.decodeMessage(version, magic, command, length, in);
+			in.position(base + 24 + length);
+			return m;
+		} catch (IOException e) {
+			in.position(base + 4);
 			return null;
 		}
-
-		return decoder.decodeMessage(magic, command, data);
+	}
+	
+	/**
+	 * Encodes a message to the given output stream, using the current protocol.
+	 * 
+	 * @param message the Message
+	 * @param out the ByteBuffer
+	 * @throws IOException
+	 * @return the required buffer size, or SUCCESS on success
+	 */
+	public static int encodeMessage(Message<?> message, ByteBuffer out) {
+		return encodeMessage(PROTOCOL_VERSION, message, out);
 	}
 	
 	/**
 	 * Encodes a message to the given output stream.
 	 * 
+	 * @param version the protocol version
 	 * @param message the Message
-	 * @param out the OutputStream
+	 * @param out the ByteBuffer
 	 * @throws IOException
+	 * @return the required buffer size, or SUCCESS on success
 	 */
-	public static void encodeMessage(Message message, ExtendedDataOutputStream out) throws IOException {
-		out.writeInt(message.getMagicValue());
-		out.write(ParseUtils.stringToCommandBytes(message.getCommand()));
+	public static int encodeMessage(int version, Message<?> message, ByteBuffer out) {
 		
-		byte[] data = message.serialize();
+		int length = message.getLength(version);
 		
-		out.writeIntLE(data.length);
+		if (length + 24 > out.remaining()) {
+			return length + 24;
+		}
 		
-		byte[] sha256 = DigestUtils.doubleSHA256(data);
-		out.write(sha256, 0, 4);
-		out.write(data);
+		int base = out.position();
+		
+		out.putInt(message.getMagicValue());
+		out.put(ParseUtils.stringToCommandBytes(message.getCommand()));
+		
+		out.order(ByteOrder.LITTLE_ENDIAN);
+		out.putInt(length);
+		out.order(ByteOrder.BIG_ENDIAN);
+		
+		out.position(base + 24);
+		message.put(version, out);
+
+		byte[] sha256 = DigestUtils.doubleSHA256(out, base + 24, length);
+		out.position(base + 20);
+		out.put(sha256, 0, 4);
+		
+		out.position(base + 24 + length);
+		
+		return SUCCESS;
 	}
 	
-	private static int scanForMagicValue(int expectedMagicValue, InputStream in) throws IOException {
-		int magic = 0;
+	/**
+	 * Gets the name of the client
+	 * 
+	 * @return
+	 */
+	public static String getClientName() {
+		// TODO - should be determined from pom.xml
+		return "BCNode";
+	}
+	
+	/**
+	 * Scans until the magic value is reached.  If there is less than 4 bytes in the buffer, it will return -1.<br>
+	 * <br>
+	 * The buffer will be positioned at the start of the magic value if one is found.  Otherwise, it will be read until there is fewer then 4 bytes remaining.
+	 * 
+	 * @param expectedMagicValue
+	 * @param in
+	 * @return
+	 */
+	private static int scanForMagicValue(int expectedMagicValue, ByteBuffer in) {
+		int base = in.position();
+		int skipped = -1;
+		int magic = ~expectedMagicValue;
 		while (magic != expectedMagicValue) {
-			int i = in.read();
-			if (i == -1) {
-				throw new EOFException("End of stream reached while scanning for magic value");
+			skipped++;
+			if (base + skipped + 4 > in.limit()) {
+				in.position(Math.max(base, in.limit() - 3));
+				return ~expectedMagicValue;
 			}
-			magic = (magic << 8) | (i & 0xFF);
+			magic = in.getInt(base + skipped);
 		}
+		in.position(base + skipped);
 		return magic;
 	}
 	
@@ -166,13 +268,19 @@ public abstract class Message {
 	static {
 		decoders = new HashMap<String, MessageDecoder>();
 		unknownDecoder = new MessageDecoder() {
-			public Message decodeMessage(int magic, String command, byte[] data) throws IOException {
-				return new UnknownMessage(magic, command, data);
+			public UnknownMessage decodeMessage(int version, int magic, String command, int length, ByteBuffer in) throws IOException {
+				return new UnknownMessage(magic, command, length, in);
 			}
 		};
+		registerMessageDecoder("version", new MessageDecoder() {
+			@Override
+			public Message<?> decodeMessage(int version, int magic, String command, int length, ByteBuffer in) throws IOException {
+				return new VersionMessage(magic, version, in);
+			}
+		});
 	}
 	
-	private void registerMessageDecoder(String command, MessageDecoder decoder) {
+	private static void registerMessageDecoder(String command, MessageDecoder decoder) {
 		decoders.put(command, decoder);
 	}
 	
@@ -186,7 +294,7 @@ public abstract class Message {
 	
 	private interface MessageDecoder {
 		
-		public Message decodeMessage(int magic, String command, byte[] data) throws IOException;
+		public Message<?> decodeMessage(int version, int magic, String command, int length, ByteBuffer in) throws IOException;
 		
 	}
 

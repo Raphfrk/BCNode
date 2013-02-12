@@ -23,33 +23,53 @@
  */
 package com.raphfrk.bitcoin.bcnode.util;
 
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 
 public class DigestUtils {
 	
-	public static byte[] SHA256(byte[] message) {
+	public static byte[] SHA256(ByteBuffer buf, int off, int length) {
+		int limit = buf.limit();
+		int position = buf.position();
+		if (off + length > limit) {
+			return null;
+		}
+		buf.position(off);
+		buf.limit(off + length);
 		try {
-			MessageDigest d = MessageDigest.getInstance("SHA-256", "BC");
-			d.reset();
-			return d.digest(message);
-		} catch (NoSuchAlgorithmException e) {
-			return null;
-		} catch (NoSuchProviderException e) {
-			return null;
+			return SHA256(buf.slice(), 1);
+		} finally {
+			buf.limit(limit);
+			buf.position(position);
 		}
 	}
 	
-	public static byte[] doubleSHA256(byte[] message) {
-		return SHA256(message, 2);
+	public static byte[] doubleSHA256(ByteBuffer buf, int off, int length) {
+		int limit = buf.limit();
+		int position = buf.position();
+		if (off + length > limit) {
+			return null;
+		}
+		buf.position(off);
+		buf.limit(off + length);
+		try {
+			return SHA256(buf.slice(), 2);
+		} finally {
+			buf.limit(limit);
+			buf.position(position);
+		}	
 	}
 	
-	public static byte[] SHA256(byte[] message, int n) {
+	public static byte[] SHA256(ByteBuffer buf, int n) {
 		try {
 			MessageDigest d = MessageDigest.getInstance("SHA-256", "BC");
 			d.reset();
-			for (int i = 0; i < n; i++) {
+			d.update(buf);
+			byte[] message = d.digest();
+			for (int i = 1; i < n; i++) {
+				d.reset();
 				message = d.digest(message);
 			}
 			return message;

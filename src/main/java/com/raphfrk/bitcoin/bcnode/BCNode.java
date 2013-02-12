@@ -23,10 +23,11 @@
  */
 package com.raphfrk.bitcoin.bcnode;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Security;
@@ -34,14 +35,27 @@ import java.security.Security;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import com.raphfrk.bitcoin.bcnode.network.message.Message;
-import com.raphfrk.bitcoin.bcnode.network.streams.ExtendedDataInputStream;
-import com.raphfrk.bitcoin.bcnode.network.streams.ExtendedDataOutputStream;
+import com.raphfrk.bitcoin.bcnode.network.message.VersionMessage;
 import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
 
 public class BCNode {
 	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException {
 		Security.addProvider(new BouncyCastleProvider());
-		
+
+		SocketChannel channel = SocketChannel.open(new InetSocketAddress("localhost", 8333));
+
+		ByteBuffer buf = ByteBuffer.allocate(1024);
+
+		int timestamp = (int) (System.currentTimeMillis() / 1000);
+
+		VersionMessage versionMessage = new VersionMessage(0xF9BEB4D9, Message.PROTOCOL_VERSION, VersionMessage.NODE_NETWORK, timestamp, null, null, 0x123456789ABCDEFL, Message.getClientName(), 200000);
+
+		System.out.println("Sending message: " + versionMessage);
+
+		Message.encodeMessage(versionMessage, buf);
+
+		buf.flip();
+
 		// Test message from wiki
 		byte[] testMessage = ParseUtils.hexStringToBytes(
 				"f9beb4d976657273696f6e0000000000" + 
@@ -52,16 +66,27 @@ public class BCNode {
 				"0000000000000000ffff000000000000" + 
 				"3b2eb35d8ce617650f2f5361746f7368" + 
 				"693a302e372e322fc03e0300");
-		
-		ExtendedDataInputStream dis = new ExtendedDataInputStream(new ByteArrayInputStream(testMessage));
-		Message m = Message.decodeMessage(0xF9BEB4D9 , dis);
-		
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		ExtendedDataOutputStream dos = new ExtendedDataOutputStream(bos);
-		Message.encodeMessage(m, dos);
-		dos.flush();
-		byte[] encoded = bos.toByteArray();
-		System.out.println("Input:   " + ParseUtils.bytesToHexString(testMessage));
-		System.out.println("Encoded: " + ParseUtils.bytesToHexString(encoded));		
+
+		//buf = ByteBuffer.wrap(testMessage);
+
+		channel.write(buf);
+
+		buf.position(0);
+		buf.limit(buf.capacity());
+
+		Message.encodeMessage(versionMessage, buf);
+
+		buf.flip();
+
+		buf.position(0);
+		buf.limit(buf.capacity());
+
+		channel.read(buf);
+
+		buf.flip();
+
+		Message<?> received = Message.decodeMessage(Message.PROTOCOL_VERSION, Message.MAIN_NETWORK , buf);
+
+		System.out.println("Received message: " + received);
 	}
 }

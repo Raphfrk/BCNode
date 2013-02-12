@@ -21,36 +21,17 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.util;
 
-import junit.framework.Test;
-import junit.framework.TestCase;
-import junit.framework.TestSuite;
+import static org.junit.Assert.assertTrue;
 
-/**
- * Unit test for simple App.
- */
-public class BCNodeTest extends TestCase {
-    /**
-     * Create the test case
-     *
-     * @param testName name of the test case
-     */
-    public BCNodeTest( String testName ) {
-        super( testName );
-    }
+import org.junit.Test;
 
-    /**
-     * @return the suite of tests being tested
-     */
-    public static Test suite() {
-        return new TestSuite( BCNodeTest.class );
-    }
+public class EmptyTest {
+	
+	@Test
+	public void test() {
+		assertTrue("Booleans are broken", true);
+	}
 
-    /**
-     * Rigourous Test :-)
-     */
-    public void testBCNode() {
-        assertTrue( true );
-    }
 }

@@ -21,46 +21,31 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.util;
 
 import java.nio.ByteBuffer;
 
-import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
-
-
-public class UnknownMessage extends Message<UnknownMessage> {
+public class ByteBufferUtils {
 	
-	private final byte[] data;
-	private final String command;
-	
-	public UnknownMessage(int magic, String command, int length, ByteBuffer in) {
-		super(magic);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
+	/**
+	 * Compares a portion of two ByteBuffers.  The method returns false if the section is out of bounds for either ByteBuffer
+	 * 
+	 * @param a
+	 * @param aPosition
+	 * @param b
+	 * @param bPosition
+	 * @param length
+	 * @return true if equal
+	 */
+	public static boolean equals(ByteBuffer a, int aPosition, ByteBuffer b, int bPosition, int length) {
+		if (a.remaining() < length || b.remaining() < length) {
+			return false;
+		}
+		for (; length > 0; length--) {
+			if (a.get(aPosition++) != b.get(bPosition++)) {
+				return false;
+			}
+		}
+		return true;
 	}
-	
-	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
-	}
-
-	@Override
-	public String getCommand() {
-		return command;
-	}
-
-	@Override
-	public int getLength(int version) {
-		return data.length;
-	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
-	}
-
 }

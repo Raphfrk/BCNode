@@ -21,46 +21,60 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.network.elements;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
 
-
-public class UnknownMessage extends Message<UnknownMessage> {
+public class VarString implements MessageElement<VarString> {
 	
-	private final byte[] data;
-	private final String command;
+	private final String value;
 	
-	public UnknownMessage(int magic, String command, int length, ByteBuffer in) {
-		super(magic);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
+	public VarString(int version, ByteBuffer buf) throws IOException {
+		value = get(version, buf);
 	}
 	
-	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
+	public VarString(String string) {
+		this.value = string;
 	}
 
 	@Override
-	public String getCommand() {
-		return command;
+	public void put(int version, ByteBuffer buf) {
+		put(version, buf, value);
 	}
 
 	@Override
 	public int getLength(int version) {
-		return data.length;
+		return value.length() + VarInt.getLength(version, value.length());
 	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
+	
+	public static String get(int version, ByteBuffer buf) throws IOException {
+		long length = VarInt.get(version, buf);
+		if (length < 0 || length > Integer.MAX_VALUE || length > buf.remaining()) {
+			throw new IOException("Length field in VarString exceeds buffer remaining, " + length);
+		}
+		char[] cb = new char[(int) length];
+		for (int i = 0; i < (int) length; i++) {
+			cb[i] = (char) (buf.get() & 0xFF);
+		}
+		return new String(cb);
+	}
+	
+	public static void put(int version, ByteBuffer buf, String value) {
+		long length = value.length();
+		VarInt.put(version, buf, length);
+		char[] cb = value.toCharArray();
+		for (int i = 0; i < cb.length; i++) {
+			buf.put((byte) cb[i]);
+		}
+	}
+	
+	public String toString() {
+		return new StringGenerator(true)
+			.add("Value", value)
+			.done();
 	}
 
 }

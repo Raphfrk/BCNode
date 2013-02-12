@@ -4,7 +4,7 @@
   <groupId>com.raphfrk.bitcoin</groupId>
   <artifactId>bcnode</artifactId>
   <packaging>jar</packaging>
-  <version>1.0-SNAPSHOT</version>
+  <version>0.0.1-DEV</version>
   <name>BCNode</name>
   <url>www.raphfrk.com/bcnode</url>
   <!-- Build properties -->
@@ -121,7 +121,7 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>3.8.1</version>
+      <version>4.11</version>
       <scope>test</scope>
     </dependency>
     <!-- Included in the final JAR -->

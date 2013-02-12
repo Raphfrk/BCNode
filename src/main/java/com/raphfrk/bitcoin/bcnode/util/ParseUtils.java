@@ -23,6 +23,10 @@
  */
 package com.raphfrk.bitcoin.bcnode.util;
 
+import java.nio.ByteBuffer;
+
+import com.raphfrk.bitcoin.bcnode.network.message.Message;
+
 public class ParseUtils {
 	
 	private static final int[] charToInt;
@@ -74,6 +78,40 @@ public class ParseUtils {
 			chars[j + 1] = hexChars[1];
 		}
 		return new String(chars);
+	}
+	
+	public static String bytesToDotDecimal(ByteBuffer buf) {
+		byte[] bytes = new byte[buf.remaining()];
+		buf.get(bytes);
+		return bytesToDotDecimal(bytes);
+	}
+	
+	public static String bytesToDotDecimal(byte[] arr) {
+		StringBuilder sb = new StringBuilder();
+		boolean first = true;
+		for (int i = 0; i < arr.length; i++) {
+			if (first) {
+				first = false;
+			} else {
+				sb.append('.');
+			}
+			sb.append(arr[i] & 0xFF);
+		}
+		return sb.toString();
+	}
+	
+	public static String bytesToHexString(ByteBuffer buf) {
+		byte[] bytes = new byte[buf.remaining()];
+		buf.get(bytes);
+		return bytesToHexString(bytes);
+	}
+	
+	public static String messageToHexString(Message<?> message) {
+		int length = message.getLength(Message.PROTOCOL_VERSION) + 24;
+		ByteBuffer buf = ByteBuffer.allocate(length);
+		Message.encodeMessage(message, buf);
+		buf.flip();
+		return bytesToHexString(buf);
 	}
 	
 	private static int hexCharToInt(char c) {
