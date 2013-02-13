@@ -74,9 +74,9 @@ public class DigestUtils {
 			}
 			return message;
 		} catch (NoSuchAlgorithmException e) {
-			return null;
+			throw new IllegalStateException("Bouncy castle should support SHA-256", e);
 		} catch (NoSuchProviderException e) {
-			return null;
+			throw new IllegalStateException("Bouncy castle should be registered as a provider", e);
 		}
 	}
 

@@ -36,7 +36,7 @@ public class VersionMessage extends Message<VersionMessage> {
 	
 	public static final long NODE_NETWORK = 1;
 	
-	private final int version; // Not used
+	private final int version;
 	private final long services;
 	private final long timestamp;
 	private final NetworkAddress remoteAddress;
@@ -82,6 +82,34 @@ public class VersionMessage extends Message<VersionMessage> {
 			userAgent = new VarString("");
 			startHeight = 0;
 		}
+	}
+	
+	public int getVersion() {
+		return version;
+	}
+	
+	public long getServices() {
+		return services;
+	}
+	
+	public long getTimestamp() {
+		return timestamp;
+	}
+	
+	public NetworkAddress getRemoteAddress() {
+		return remoteAddress;
+	}
+	
+	public NetworkAddress getLocalAddress() {
+		return localAddress;
+	}
+	
+	public long getNonce() {
+		return nonce;
+	}
+	
+	public int getStartHeight() {
+		return startHeight;
 	}
 
 	@Override

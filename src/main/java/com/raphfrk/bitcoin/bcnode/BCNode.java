@@ -48,9 +48,7 @@ public class BCNode {
 
 		int timestamp = (int) (System.currentTimeMillis() / 1000);
 
-		VersionMessage versionMessage = new VersionMessage(0xF9BEB4D9, Message.PROTOCOL_VERSION, VersionMessage.NODE_NETWORK, timestamp, null, null, 0x123456789ABCDEFL, Message.getClientName(), 200000);
-
-		System.out.println("Sending message: " + versionMessage);
+		VersionMessage versionMessage = new VersionMessage(Message.MAGIC_MAIN_NETWORK, Message.PROTOCOL_VERSION, VersionMessage.NODE_NETWORK, timestamp, null, null, 0x123456789ABCDEFL, Message.getClientName(), 200000);
 
 		Message.encodeMessage(versionMessage, buf);
 
@@ -85,7 +83,7 @@ public class BCNode {
 
 		buf.flip();
 
-		Message<?> received = Message.decodeMessage(Message.PROTOCOL_VERSION, Message.MAIN_NETWORK , buf);
+		Message<?> received = Message.decodeMessage(Message.PROTOCOL_VERSION, Message.MAGIC_MAIN_NETWORK , buf);
 
 		System.out.println("Received message: " + received);
 	}

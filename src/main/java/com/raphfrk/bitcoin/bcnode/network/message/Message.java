@@ -38,7 +38,7 @@ public abstract class Message<T extends Message<?>> implements MessageElement<T>
 	
 	public static final int PROTOCOL_VERSION = 60002;
 	
-	public static final int MAIN_NETWORK = 0xF9BEB4D9;
+	public static final int MAGIC_MAIN_NETWORK = 0xF9BEB4D9;
 	
 	public static final int SUCCESS = -1;
 	
@@ -173,7 +173,7 @@ public abstract class Message<T extends Message<?>> implements MessageElement<T>
 			return m;
 		} catch (IOException e) {
 			in.position(base + 4);
-			return null;
+			throw new IllegalStateException("Channels should always have sufficent data for message read", e);
 		}
 	}
 	

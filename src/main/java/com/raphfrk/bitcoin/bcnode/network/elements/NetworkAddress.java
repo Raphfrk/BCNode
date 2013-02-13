@@ -26,6 +26,7 @@ package com.raphfrk.bitcoin.bcnode.network.elements;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -77,6 +78,22 @@ public class NetworkAddress implements MessageElement<NetworkAddress> {
 		port = buf.getShort() & 0xFFFF;
 		this.versionMessage = versionMessage;
 	}
+	
+	public InetSocketAddress getInetSocketAddress() {
+		return new InetSocketAddress(getInetAddress(), getPort());
+	}
+	
+	public InetAddress getInetAddress() {
+		try {
+			return InetAddress.getByAddress(addr);
+		} catch (UnknownHostException e) {
+			throw new IllegalStateException("The address must always be 16 bytes long, " + addr.length);
+		}
+	}
+	
+	public int getPort() {
+		return port;
+	}
 
 	@Override
 	public void put(int version, ByteBuffer buf) {
@@ -122,21 +139,28 @@ public class NetworkAddress implements MessageElement<NetworkAddress> {
 	}
 	
 	private String getNetworkAddress() {
-		for (int i = 0; i < 10; i++) {
-			if (addr[i] != 0) {
-				return ParseUtils.bytesToHexString(addr);
-			}
-		}
-		for (int i = 10; i < 12; i++) {
-			if (addr[i] != -1) {
-				return ParseUtils.bytesToHexString(addr);
-			}
+		if (!isIP4Address()) {
+			return ParseUtils.bytesToHexString(addr);
 		}
 		byte arr[] = new byte[4];
 		for (int i = 12; i < 16; i++) {
 			arr[i - 12] = addr[i];
 		}
 		return ParseUtils.bytesToDotDecimal(arr);
+	}
+	
+	private boolean isIP4Address() {
+		for (int i = 0; i < 10; i++) {
+			if (addr[i] != 0) {
+				return false;
+			}
+		}
+		for (int i = 10; i < 12; i++) {
+			if (addr[i] != -1) {
+				return false;
+			}
+		}
+		return true;
 	}
 	
 	public String toString() {
