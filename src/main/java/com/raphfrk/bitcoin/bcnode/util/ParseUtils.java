@@ -106,10 +106,10 @@ public class ParseUtils {
 		return bytesToHexString(bytes);
 	}
 	
-	public static String messageToHexString(Message<?> message) {
-		int length = message.getLength(Message.PROTOCOL_VERSION) + 24;
+	public static String messageToHexString(int version, Message<?> message) {
+		int length = message.getLength(version) + 24;
 		ByteBuffer buf = ByteBuffer.allocate(length);
-		Message.encodeMessage(message, buf);
+		message.getProtocol().encodeMessage(message.getProtocol().getVersion(), message, buf);
 		buf.flip();
 		return bytesToHexString(buf);
 	}
@@ -149,6 +149,18 @@ public class ParseUtils {
 			commandChars[i] = (char) (bytes[i] & 0xFF);
 		}
 		return new String(commandChars).trim();
+	}
+	
+	public static String pad(String prefix, char padding, int minimumLength) {
+		if (prefix.length() < minimumLength) {
+			StringBuilder sb = new StringBuilder(minimumLength);
+			sb.append(prefix);
+			for (int i = 0; i < minimumLength - prefix.length(); i++) {
+				sb.append(padding);
+			}
+			return sb.toString();
+		}
+		return prefix;
 	}
 	
 }

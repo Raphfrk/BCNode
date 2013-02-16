@@ -21,47 +21,37 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.network.p2p;
 
+import java.lang.ref.Reference;
+import java.lang.ref.SoftReference;
 import java.nio.ByteBuffer;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
-import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
+import com.raphfrk.bitcoin.bcnode.config.Config;
 
-
-public class UnknownMessage extends Message<UnknownMessage> {
+public class LargeBufferCache {
 	
-	private final byte[] data;
-	private final String command;
+	private final static long maxMessageSize = Config.MAX_MESSAGE_SIZE.get();
 	
-	public UnknownMessage(Protocol<?> protocol, String command, int length, ByteBuffer in) {
-		super(protocol);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
+	private final static ConcurrentLinkedQueue<Reference<ByteBuffer>> cache = new ConcurrentLinkedQueue<Reference<ByteBuffer>>();
+	
+	public static ByteBuffer getBuffer() {
+		Reference<ByteBuffer> ref;
+		while ((ref = cache.poll()) != null) {
+			ByteBuffer buffer = ref.get();
+			if (buffer != null) {
+				buffer.clear();
+				return buffer;
+			}
+		}
+		return ByteBuffer.allocateDirect((int) maxMessageSize);
 	}
 	
-	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
+	public static void returnBuffer(ByteBuffer buf) {
+		if (buf.limit() == maxMessageSize) {
+			cache.add(new SoftReference<ByteBuffer>(buf));
+		}
 	}
-
-	@Override
-	public String getCommand() {
-		return command;
-	}
-
-	@Override
-	public int getLength(int version) {
-		return data.length;
-	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
-	}
-
+	
 }

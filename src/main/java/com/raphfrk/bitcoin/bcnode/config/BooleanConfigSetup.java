@@ -21,47 +21,42 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.config;
 
-import java.nio.ByteBuffer;
+public class BooleanConfigSetup extends ConfigSetup<Boolean> {
 
-import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
-import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
-
-
-public class UnknownMessage extends Message<UnknownMessage> {
+	private Boolean value;
 	
-	private final byte[] data;
-	private final String command;
-	
-	public UnknownMessage(Protocol<?> protocol, String command, int length, ByteBuffer in) {
-		super(protocol);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
+	public BooleanConfigSetup(String key, Boolean value, String description) {
+		super(key, value, description);
+		this.value = null;
 	}
 	
 	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
+	public synchronized Boolean get() {
+		if (value == null) {
+			try {
+				value = Boolean.parseBoolean(super.getString());
+			} catch (NumberFormatException e) {
+				e.printStackTrace();
+				value = getDefaultValue();
+			}
+		}
+		return value;
 	}
 
 	@Override
-	public String getCommand() {
-		return command;
+	public synchronized void set(Boolean value) {
+		System.out.println("Setting value: " + value);
+		this.value = value;
+		super.setString(asString(value));
 	}
 
 	@Override
-	public int getLength(int version) {
-		return data.length;
+	protected String asString(Boolean value) {
+		return Boolean.toString(value);
 	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
-	}
-
+	
+	
+	
 }

@@ -21,47 +21,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.network.protocol;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
-import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
+import com.raphfrk.bitcoin.bcnode.network.message.Message;
 
-
-public class UnknownMessage extends Message<UnknownMessage> {
-	
-	private final byte[] data;
-	private final String command;
-	
-	public UnknownMessage(Protocol<?> protocol, String command, int length, ByteBuffer in) {
-		super(protocol);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
-	}
-	
-	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
-	}
-
-	@Override
-	public String getCommand() {
-		return command;
-	}
-
-	@Override
-	public int getLength(int version) {
-		return data.length;
-	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
-	}
-
+public interface MessageDecoder {
+	public Message<?> decodeMessage(int version, int magic, String command, int length, ByteBuffer in) throws IOException;
 }

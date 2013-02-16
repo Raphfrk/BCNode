@@ -21,47 +21,43 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.network.bitcoin.message;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinPeer;
 import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
 import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
 
-
-public class UnknownMessage extends Message<UnknownMessage> {
+public class VerackMessage extends BitcoinMessage<VerackMessage> {
 	
-	private final byte[] data;
-	private final String command;
-	
-	public UnknownMessage(Protocol<?> protocol, String command, int length, ByteBuffer in) {
+	public VerackMessage(Protocol<BitcoinPeer> protocol) {
 		super(protocol);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
 	}
 	
-	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
+	public VerackMessage(Protocol<BitcoinPeer> protocol, int magic, ByteBuffer buf) throws IOException {
+		super(protocol);
 	}
-
+	
 	@Override
 	public String getCommand() {
-		return command;
+		return "verack";
+	}
+
+	@Override
+	public void put(int version, ByteBuffer buf) {
 	}
 
 	@Override
 	public int getLength(int version) {
-		return data.length;
+		return 0;
 	}
 
 	@Override
 	protected String getPayloadString() {
 		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
+			.done();
 	}
 
 }

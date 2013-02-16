@@ -23,6 +23,8 @@
  */
 package com.raphfrk.bitcoin.bcnode.config;
 
+import java.nio.ByteBuffer;
+
 public class LongConfigSetup extends ConfigSetup<Long> {
 
 	private Long value;
@@ -34,6 +36,13 @@ public class LongConfigSetup extends ConfigSetup<Long> {
 	
 	@Override
 	public synchronized Long get() {
+		if (value == null) {
+			try {
+				value = Long.parseLong(super.getString());
+			} catch (NumberFormatException e) {
+				value = getDefaultValue();
+			}
+		}
 		return value;
 	}
 
@@ -46,6 +55,5 @@ public class LongConfigSetup extends ConfigSetup<Long> {
 	@Override
 	protected String asString(Long value) {
 		return Long.toString(value);
-	}
-	
+	}	
 }

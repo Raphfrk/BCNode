@@ -38,11 +38,20 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
+
 public class Config {
 	
-	public static final DummyConfigSetup LINE1 = new DummyConfigSetup("# BCNode Configuration File"); 
-	public static final DummyConfigSetup LINE2 = new DummyConfigSetup(""); 
+	private static final DummyConfigSetup LINE1 = new DummyConfigSetup("BCNode Configuration File"); 
+	private static final DummyConfigSetup LINE2 = new DummyConfigSetup("");
+
+	private static final DummyConfigSetup NETWORK_SETTINGS = new DummyConfigSetup("Network Settings");
 	public static final ConfigSetup<Long> MAX_MESSAGE_SIZE = new LongConfigSetup("max_message_size", 10485760L, "Maximum message size in bytes");
+	public static final ConfigSetup<Integer> PEER_BUFFER_SIZE = new IntConfigSetup("peer_buffer_size", 8192, "The size of the standard read/write buffers in bytes");
+	
+	private static final DummyConfigSetup LINE3 = new DummyConfigSetup("");
+	private static final DummyConfigSetup LOG_SETTINGS = new DummyConfigSetup("Log Settings");
+	public static final ConfigSetup<Boolean> LOG_TO_FILE = new BooleanConfigSetup("log_to_file", true, "log all console outputs to the /log directory");
 	
 	protected static Config getInstance() {
 		return instance;
@@ -105,7 +114,7 @@ public class Config {
 					} else {
 						String[] split2 = split[1].split("#", 2);
 						String description = split2.length == 1 ? "" : split2[1];
-						ConfigEntry entry = new ConfigEntry(lineCounter++, sanitize(split[0]), sanitize(split[1]), s, description);
+						ConfigEntry entry = new ConfigEntry(lineCounter++, sanitize(split[0]), sanitize(split2[0]), s, description);
 						String key = sanitize(split[0]);
 						if (!map.containsKey(key)) {
 							map.put(key, entry);
@@ -232,7 +241,11 @@ public class Config {
 		
 		public synchronized void setValueString(String value) {
 			this.value = value;
-			this.originalLine = sanitize(getKey()) + "=" + sanitize(value) + " # " + description.trim();
+			this.originalLine = pad(sanitize(getKey()), 22) + "= " + pad(sanitize(value), 10) + " # " + description.trim();
+		}
+		
+		public String pad(String prefix, int minimumLength) {
+			return ParseUtils.pad(prefix, ' ', minimumLength);
 		}
 	}
 	

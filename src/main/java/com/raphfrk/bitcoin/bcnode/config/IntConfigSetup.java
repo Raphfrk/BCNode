@@ -21,47 +21,38 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.config;
 
-import java.nio.ByteBuffer;
+public class IntConfigSetup extends ConfigSetup<Integer> {
 
-import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
-import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
-
-
-public class UnknownMessage extends Message<UnknownMessage> {
+	private Integer value;
 	
-	private final byte[] data;
-	private final String command;
-	
-	public UnknownMessage(Protocol<?> protocol, String command, int length, ByteBuffer in) {
-		super(protocol);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
+	public IntConfigSetup(String key, Integer value, String description) {
+		super(key, value, description);
+		this.value = value;
 	}
 	
 	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
+	public synchronized Integer get() {
+		if (value == null) {
+			try {
+				value = Integer.parseInt(super.getString());
+			} catch (NumberFormatException e) {
+				value = getDefaultValue();
+			}
+		}
+		return value;
 	}
 
 	@Override
-	public String getCommand() {
-		return command;
+	public synchronized void set(Integer value) {
+		this.value = value;
+		super.setString(asString(value));
 	}
 
 	@Override
-	public int getLength(int version) {
-		return data.length;
+	protected String asString(Integer value) {
+		return Long.toString(value);
 	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
-	}
-
+	
 }

@@ -21,18 +21,20 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.network.bitcoin.message;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinPeer;
 import com.raphfrk.bitcoin.bcnode.network.elements.NetworkAddress;
 import com.raphfrk.bitcoin.bcnode.network.elements.VarString;
+import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
 import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
 
-public class VersionMessage extends Message<VersionMessage> {
+public class VersionMessage extends BitcoinMessage<VersionMessage> {
 	
 	public static final long NODE_NETWORK = 1;
 	
@@ -45,9 +47,9 @@ public class VersionMessage extends Message<VersionMessage> {
 	private final VarString userAgent;
 	private final int startHeight;
 
-	public VersionMessage(int magic, int version, long services, long timestamp, InetSocketAddress remoteAddress, InetSocketAddress localAddress, long nonce, String userAgent, int startHeight) {
-		super(magic);
-		this.version = version;
+	public VersionMessage(Protocol<BitcoinPeer> protocol, long services, long timestamp, InetSocketAddress remoteAddress, InetSocketAddress localAddress, long nonce, String userAgent, int startHeight) {
+		super(protocol);
+		this.version = protocol.getVersion();
 		this.services = services;
 		this.timestamp = timestamp;
 		this.remoteAddress = new NetworkAddress(true, services, remoteAddress);
@@ -57,12 +59,8 @@ public class VersionMessage extends Message<VersionMessage> {
 		this.startHeight = startHeight;
 	}
 	
-	protected VersionMessage(int magic, ByteBuffer buf) throws IOException {
-		this(magic, Message.PROTOCOL_VERSION, buf);
-	}
-	
-	protected VersionMessage(int magic, int version, ByteBuffer buf) throws IOException {
-		super(magic);
+	public VersionMessage(Protocol<BitcoinPeer> protocol, int magic, ByteBuffer buf) throws IOException {
+		super(protocol);
 		buf.order(ByteOrder.LITTLE_ENDIAN);
 		this.version = buf.getInt();
 		this.services = buf.getLong();
@@ -83,7 +81,7 @@ public class VersionMessage extends Message<VersionMessage> {
 			startHeight = 0;
 		}
 	}
-	
+
 	public int getVersion() {
 		return version;
 	}

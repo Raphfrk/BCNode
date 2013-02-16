@@ -21,47 +21,30 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode.network.message;
+package com.raphfrk.bitcoin.bcnode.util;
 
-import java.nio.ByteBuffer;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
-import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
+public class NamedThreadFactory implements ThreadFactory {
+    private final String namePrefix;
+    private final boolean daemon;
+    private static final AtomicInteger idCounter = new AtomicInteger();
 
+    public NamedThreadFactory(String namePrefix) {
+            this(namePrefix, false);
+    }
 
-public class UnknownMessage extends Message<UnknownMessage> {
-	
-	private final byte[] data;
-	private final String command;
-	
-	public UnknownMessage(Protocol<?> protocol, String command, int length, ByteBuffer in) {
-		super(protocol);
-		this.command = command;
-		this.data = new byte[length];
-		in.get(this.data);
-	}
-	
-	@Override
-	public void put(int version, ByteBuffer out) {
-		out.put(data);
-	}
+    public NamedThreadFactory(String namePrefix, boolean daemon) {
+            this.namePrefix = namePrefix;
+            this.daemon = daemon;
+    }
 
-	@Override
-	public String getCommand() {
-		return command;
-	}
-
-	@Override
-	public int getLength(int version) {
-		return data.length;
-	}
-
-	@Override
-	protected String getPayloadString() {
-		return new StringGenerator()
-				.add("Command", command)
-				.add("Data", data)
-				.done();
-	}
-
+    @Override
+    public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "Executor{" + namePrefix + "-" + idCounter.getAndIncrement() + "}");
+            thread.setDaemon(daemon);
+            return thread;
+    }
 }
+

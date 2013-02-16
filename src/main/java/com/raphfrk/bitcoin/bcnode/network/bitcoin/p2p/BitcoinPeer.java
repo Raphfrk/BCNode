@@ -21,49 +21,47 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
+import java.nio.channels.SocketChannel;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
-import com.raphfrk.bitcoin.bcnode.log.LogManager;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.VersionMessage;
 import com.raphfrk.bitcoin.bcnode.network.bitcoin.protocol.BitcoinProtocol;
+import com.raphfrk.bitcoin.bcnode.network.message.Message;
 import com.raphfrk.bitcoin.bcnode.network.p2p.P2PManager;
-import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
+import com.raphfrk.bitcoin.bcnode.network.p2p.Peer;
 
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException, InterruptedException {
-		Security.addProvider(new BouncyCastleProvider());
-		LogManager.init();
-		
-		BitcoinProtocol protocol = new BitcoinProtocol();
-		P2PManager manager = new P2PManager(protocol);
-		manager.start();
-		
-		manager.connect(new InetSocketAddress("localhost", 8333));
-		
-		System.in.read();
-		
-		manager.interrupt();
-		
-		manager.join();
+public class BitcoinPeer extends Peer<BitcoinProtocol> {
 
-		// Test message from wiki
-		byte[] testMessage = ParseUtils.hexStringToBytes(
-				"f9beb4d976657273696f6e0000000000" + 
-				"64000000358d493262ea000001000000" + 
-				"0000000011b2d0500000000001000000" + 
-				"0000000000000000000000000000ffff" + 
-				"00000000000000000000000000000000" + 
-				"0000000000000000ffff000000000000" + 
-				"3b2eb35d8ce617650f2f5361746f7368" + 
-				"693a302e372e322fc03e0300");
+	public BitcoinPeer(InetSocketAddress addr, P2PManager manager) throws IOException {
+		super(addr, manager);
 	}
+	
+	public BitcoinPeer(SocketChannel channel, P2PManager manager) throws IOException {
+		super(channel, manager);
+	}
+
+	@Override
+	public boolean onConnect() {
+		long timestamp = System.currentTimeMillis() / 1000L;
+		long localPeerId = getManager().getLocalPeerId();
+		BitcoinProtocol protocol = (BitcoinProtocol) getManager().getProtocol();
+		
+		VersionMessage versionMessage = new VersionMessage(protocol, 0L, timestamp, null, null, localPeerId, getProtocol().getClientName(), 0);
+		super.sendMessage(versionMessage);
+		return true;
+	}
+
+	@Override
+	public void onClosed(CloseReason reason) {
+		System.out.println("onClosed called: " + reason);
+	}
+
+	@Override
+	public void onReceived(Message<?> message) {
+		System.out.println("Message received, " + message);
+	}
+
 }

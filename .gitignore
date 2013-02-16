@@ -5,6 +5,7 @@ lib
 out
 target
 *.class
+logs
 
 MANIFEST.MF
 dependency-reduced-pom.xml
