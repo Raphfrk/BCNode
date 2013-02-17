@@ -30,6 +30,18 @@ import java.security.NoSuchProviderException;
 
 public class DigestUtils {
 	
+	private static final ThreadLocal <MessageDigest> localSHA256 = new ThreadLocal <MessageDigest> () {
+		@Override protected MessageDigest initialValue() {
+			try {
+				return MessageDigest.getInstance("SHA-256", "BC");
+			} catch (NoSuchAlgorithmException e) {
+				throw new IllegalStateException("Bouncy castle should support SHA-256", e);
+			} catch (NoSuchProviderException e) {
+				throw new IllegalStateException("Bouncy castle should be registered as a provider", e);
+			}
+		}
+	};
+
 	public static byte[] SHA256(ByteBuffer buf, int off, int length) {
 		int limit = buf.limit();
 		int position = buf.position();
@@ -39,7 +51,7 @@ public class DigestUtils {
 		buf.position(off);
 		buf.limit(off + length);
 		try {
-			return SHA256(buf.slice(), 1);
+			return SHA256(buf, 1);
 		} finally {
 			buf.limit(limit);
 			buf.position(position);
@@ -55,7 +67,7 @@ public class DigestUtils {
 		buf.position(off);
 		buf.limit(off + length);
 		try {
-			return SHA256(buf.slice(), 2);
+			return SHA256(buf, 2);
 		} finally {
 			buf.limit(limit);
 			buf.position(position);
@@ -63,21 +75,15 @@ public class DigestUtils {
 	}
 	
 	public static byte[] SHA256(ByteBuffer buf, int n) {
-		try {
-			MessageDigest d = MessageDigest.getInstance("SHA-256", "BC");
+		MessageDigest d = localSHA256.get();
+		d.reset();
+		d.update(buf);
+		byte[] message = d.digest();
+		for (int i = 1; i < n; i++) {
 			d.reset();
-			d.update(buf);
-			byte[] message = d.digest();
-			for (int i = 1; i < n; i++) {
-				d.reset();
-				message = d.digest(message);
-			}
-			return message;
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("Bouncy castle should support SHA-256", e);
-		} catch (NoSuchProviderException e) {
-			throw new IllegalStateException("Bouncy castle should be registered as a provider", e);
+			message = d.digest(message);
 		}
+		return message;
 	}
 
 }

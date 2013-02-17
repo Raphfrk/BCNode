@@ -39,6 +39,7 @@ import com.raphfrk.bitcoin.bcnode.network.message.Message;
 import com.raphfrk.bitcoin.bcnode.network.message.handler.HandshakeMessageHandler;
 import com.raphfrk.bitcoin.bcnode.network.message.handler.MessageHandler;
 import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
+import com.raphfrk.bitcoin.bcnode.util.CryptUtils;
 
 public abstract class Peer<T extends Protocol<?>> {
 	
@@ -58,6 +59,7 @@ public abstract class Peer<T extends Protocol<?>> {
 	private int version;
 	private final int magicValue;
 	private final T protocol;
+	private final long id;
 	private final AtomicBoolean keyRegistered;
 	private final AtomicInteger keyOps;
 	private final AtomicBoolean reading;
@@ -75,6 +77,7 @@ public abstract class Peer<T extends Protocol<?>> {
 	
 	@SuppressWarnings("unchecked")
 	public Peer(SocketChannel channel, InetSocketAddress addr, P2PManager manager) throws IOException {
+		this.id = CryptUtils.getPseudoRandomLong();
 		this.keyRegistered = new AtomicBoolean(false);
 		this.localReadBuffer = ByteBuffer.allocateDirect(localBufferSize);
 		this.readBuffer = localReadBuffer;
@@ -147,6 +150,10 @@ public abstract class Peer<T extends Protocol<?>> {
 	
 	public int getVersion() {
 		return version;
+	}
+	
+	public long getId() {
+		return id;
 	}
 	
 	private void clearKeyOp(int op) {
@@ -228,7 +235,6 @@ public abstract class Peer<T extends Protocol<?>> {
 					eof |= expandBuffer() || drainChannel(readBuffer);
 				}
 				readBuffer.flip();
-				// TODO - need to make it so these can be set by the version message
 				Message message;
 				do {
 					message = protocol.decodeMessage(version, magicValue, readBuffer);

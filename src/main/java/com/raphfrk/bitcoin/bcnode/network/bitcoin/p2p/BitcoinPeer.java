@@ -46,7 +46,7 @@ public class BitcoinPeer extends Peer<BitcoinProtocol> {
 	@Override
 	public boolean onConnect() {
 		long timestamp = System.currentTimeMillis() / 1000L;
-		long localPeerId = getManager().getLocalPeerId();
+		long localPeerId = getId();
 		BitcoinProtocol protocol = (BitcoinProtocol) getManager().getProtocol();
 		
 		VersionMessage versionMessage = new VersionMessage(protocol, 0L, timestamp, null, null, localPeerId, getProtocol().getClientName(), 0);

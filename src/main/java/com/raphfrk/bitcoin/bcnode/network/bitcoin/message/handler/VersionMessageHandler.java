@@ -34,17 +34,22 @@ public class VersionMessageHandler implements HandshakeMessageHandler<VersionMes
 
 	@Override
 	public boolean handle(VersionMessage message, BitcoinPeer peer) {
+		long remoteId = message.getNonce();
+		if (peer.getManager().getPeer(remoteId) != null) {
+			LogManager.log("Disconnecting: Connected to self");
+			return false;
+		}
 		int remoteVersion = message.getVersion();
 		int localVersion = peer.getVersion();
 		if (localVersion != 0) {
-			LogManager.log("Two version messages received from peer");
+			LogManager.log("Disconnecting: Two version messages received from peer");
 			return false;
 		}
 		if (remoteVersion == 10300) {
 			remoteVersion = 300;
 		}
 		if (remoteVersion < 209) {
-			LogManager.log("Peer uses obsolete protocol version version, " + remoteVersion);
+			LogManager.log("Disconnecting: Peer uses obsolete protocol version version, " + remoteVersion);
 			return false;
 		}
 		localVersion = Math.min(BitcoinProtocol.PROTOCOL_VERSION, remoteVersion);

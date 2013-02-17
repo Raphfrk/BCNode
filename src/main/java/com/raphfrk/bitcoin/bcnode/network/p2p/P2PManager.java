@@ -25,7 +25,6 @@ package com.raphfrk.bitcoin.bcnode.network.p2p;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -55,20 +54,16 @@ public class P2PManager extends Thread {
 
 	private final ConcurrentLinkedQueue<Peer<?>> keyDirtyQueue = new ConcurrentLinkedQueue<Peer<?>>();
 	
-	private final ConcurrentHashMap<Peer<?>, Boolean> peers = new ConcurrentHashMap<Peer<?>, Boolean>();
+	private final ConcurrentHashMap<Long, Peer<?>> peers = new ConcurrentHashMap<Long, Peer<?>>();
 	
 	private final Selector selector;
 	
 	private final Protocol<?> protocol;
 	
-	private final long localPeerId;
-	
 	public P2PManager(Protocol<?> protocol) throws IOException {
 		this.protocol = protocol;
-		this.localPeerId = getPeerId();
 		selector = SelectorProvider.provider().openSelector();
 		LogManager.log("Starting P2P server for " + protocol);
-		LogManager.log("Peer id " + Long.toHexString(getLocalPeerId()));
 	}
 	
 	public Peer<?> connect(InetSocketAddress addr) throws IOException {
@@ -84,21 +79,21 @@ public class P2PManager extends Thread {
 		return protocol.getMagicValue();
 	}
 	
-	public long getLocalPeerId() {
-		return localPeerId;
+	public Peer<?> getPeer(long id) {
+		return peers.get(id);
 	}
 	
 	protected void addPeer(Peer<?> peer) {
-		Boolean b = peers.put(peer, Boolean.TRUE);
-		if (b != null) {
+		Peer<?> oldPeer = peers.put(peer.getId(), peer);
+		if (oldPeer != null) {
 			throw new IllegalStateException("Peer already in peer set");
 		}
 		LogManager.log("Added peer to peer set, " + peer);
 	}
 	
 	protected void removePeer(Peer<?> peer) {
-		Boolean b = peers.remove(peer);
-		if (b == null || !b.equals(Boolean.TRUE)) {
+		boolean removed = peers.remove(peer.getId(), peer);
+		if (!removed) {
 			throw new IllegalStateException("Failed to successfully remove peer from peer set");
 		}
 		LogManager.log("Removed peer from peer set, " + peer);
@@ -178,20 +173,6 @@ public class P2PManager extends Thread {
 				delay *= 2;
 			}
 		} catch (InterruptedException e) {
-		}
-	}
-	
-	public static long getPeerId() {
-		try {
-			return SecureRandom.getInstance("SHA1PRNG", "BC").nextLong();
-		} catch (NoSuchAlgorithmException | NoSuchProviderException e) {
-			LogManager.log("Unable to create secure random to generate id for this peer, using default provider");
-			try {
-				return SecureRandom.getInstance("SHA1PRNG").nextLong();
-			} catch (NoSuchAlgorithmException e1) {
-				LogManager.log("Default provider also failed, using basic Random class");
-				return new Random().nextLong();
-			}
 		}
 	}
 	
