@@ -21,37 +21,48 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.util;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
+import java.nio.channels.FileLock;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
-import com.raphfrk.bitcoin.bcnode.log.LogManager;
-import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinP2PManager;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException, InterruptedException {
-		Security.addProvider(new BouncyCastleProvider());
-		LogManager.init();
-		
-		BitcoinP2PManager manager = new BitcoinP2PManager(16);
-		
-		//manager.connect(new InetSocketAddress("bitseed.xf2.org", 8333), false);
-		manager.connect(new InetSocketAddress("seed.bitcoin.sipa.be", 8333));
-		//manager.connect(new InetSocketAddress("localhost", 8333), false);
-		
-		manager.start();
-		
-		System.in.read();
-
-		manager.interrupt();
-		
-		manager.join();
+public class LockFile {
+	
+	private final File file;
+	private FileLock fileLock;
+	
+	public LockFile(File file) {
+		this.file = file;
 	}
+	
+	public synchronized boolean lock() throws IOException {
+		FileOutputStream fos = null;
+		try {
+			fos = new FileOutputStream(file);
+			fileLock = fos.getChannel().tryLock();
+			return fileLock != null;
+		} catch (IOException e) {
+			throw new IOException("Unable to lock lock file");
+		} finally {
+			if (fos != null) {
+				/*try {
+					fos.close();
+				} catch (IOException e) {
+				}*/
+			} 
+		}
+	}
+	
+	public synchronized void unlock() {
+		if (fileLock != null) {
+			try {
+				fileLock.release();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 }

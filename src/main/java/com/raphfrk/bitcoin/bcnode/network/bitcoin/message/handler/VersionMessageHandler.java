@@ -24,6 +24,8 @@
 package com.raphfrk.bitcoin.bcnode.network.bitcoin.message.handler;
 
 import com.raphfrk.bitcoin.bcnode.log.LogManager;
+import com.raphfrk.bitcoin.bcnode.network.address.AddressStatus;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.GetAddressMessage;
 import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.VerackMessage;
 import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.VersionMessage;
 import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinPeer;
@@ -49,13 +51,16 @@ public class VersionMessageHandler implements HandshakeMessageHandler<VersionMes
 			remoteVersion = 300;
 		}
 		if (remoteVersion < 209) {
-			LogManager.log("Disconnecting: Peer uses obsolete protocol version version, " + remoteVersion);
+			LogManager.log("Disconnecting: Peer uses obsolete protocol version, " + remoteVersion);
 			return false;
 		}
 		localVersion = Math.min(BitcoinProtocol.PROTOCOL_VERSION, remoteVersion);
-		LogManager.log("Setting connection version to " + localVersion);
+
 		peer.setPeerProtocolVersion(localVersion);
 		peer.sendMessage(new VerackMessage(peer.getProtocol()));
+		peer.sendMessage(new GetAddressMessage(peer.getProtocol()));
+		peer.getManager().getAddressStore().notify(peer.getRemoteAddress(), AddressStatus.CONNECT_SUCCESS);
+		
 		return true;
 	}
 

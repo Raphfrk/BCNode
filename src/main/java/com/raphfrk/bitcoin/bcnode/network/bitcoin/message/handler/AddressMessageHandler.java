@@ -21,37 +21,25 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.network.bitcoin.message.handler;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
+import com.raphfrk.bitcoin.bcnode.network.address.AddressStatus;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.AddressMessage;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinPeer;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.protocol.BitcoinProtocol;
+import com.raphfrk.bitcoin.bcnode.network.elements.NetworkAddress;
+import com.raphfrk.bitcoin.bcnode.network.message.handler.HandshakeMessageHandler;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
-import com.raphfrk.bitcoin.bcnode.log.LogManager;
-import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinP2PManager;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException, InterruptedException {
-		Security.addProvider(new BouncyCastleProvider());
-		LogManager.init();
-		
-		BitcoinP2PManager manager = new BitcoinP2PManager(16);
-		
-		//manager.connect(new InetSocketAddress("bitseed.xf2.org", 8333), false);
-		manager.connect(new InetSocketAddress("seed.bitcoin.sipa.be", 8333));
-		//manager.connect(new InetSocketAddress("localhost", 8333), false);
-		
-		manager.start();
-		
-		System.in.read();
-
-		manager.interrupt();
-		
-		manager.join();
+public class AddressMessageHandler implements HandshakeMessageHandler<AddressMessage, BitcoinPeer, BitcoinProtocol> {
+	
+	@Override
+	public boolean handle(AddressMessage message, BitcoinPeer peer) {
+		for (int i = 0; i < message.getAddressCount(); i++) {
+			NetworkAddress addr = message.getAddresses(i);
+			System.out.println("Peer notify: " + message.getAddresses(0));
+			peer.getManager().getAddressStore().notify(addr, AddressStatus.PEER_NOTIFY);
+		}
+		return true;
 	}
+	
 }

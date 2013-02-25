@@ -28,7 +28,12 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.AddressMessage;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.GetAddressMessage;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.VerackMessage;
 import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.VersionMessage;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.handler.AddressMessageHandler;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.handler.VerackMessageHandler;
 import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.handler.VersionMessageHandler;
 import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinPeer;
 import com.raphfrk.bitcoin.bcnode.network.p2p.P2PManager;
@@ -46,13 +51,13 @@ public class BitcoinProtocol extends Protocol<BitcoinPeer> {
 	}
 	
 	@Override
-	public BitcoinPeer getPeer(InetSocketAddress addr, P2PManager manager) throws IOException {
-		return new BitcoinPeer(addr, manager);
+	public BitcoinPeer getPeer(long id, InetSocketAddress addr, P2PManager manager) throws IOException {
+		return new BitcoinPeer(id, addr, manager);
 	}
 
 	@Override
-	public BitcoinPeer getPeer(SocketChannel channel, P2PManager manager) throws IOException {
-		return new BitcoinPeer(channel, manager);
+	public BitcoinPeer getPeer(long id, SocketChannel channel, P2PManager manager) throws IOException {
+		return new BitcoinPeer(id, channel, manager);
 	}
 
 	@Override
@@ -71,10 +76,27 @@ public class BitcoinProtocol extends Protocol<BitcoinPeer> {
 				return new VersionMessage(BitcoinProtocol.this, magic, in);
 			}
 		});
+		super.registerMessageDecoder("verack", new MessageDecoder() {
+			public VerackMessage decodeMessage(int version, int magic, String command, int length, ByteBuffer in) throws IOException {
+				return new VerackMessage(BitcoinProtocol.this, magic, in);
+			}
+		});
+		super.registerMessageDecoder("getaddr", new MessageDecoder() {
+			public GetAddressMessage decodeMessage(int version, int magic, String command, int length, ByteBuffer in) throws IOException {
+				return new GetAddressMessage(BitcoinProtocol.this, magic, in);
+			}
+		});
+		super.registerMessageDecoder("addr", new MessageDecoder() {
+			public AddressMessage decodeMessage(int version, int magic, String command, int length, ByteBuffer in) throws IOException {
+				return new AddressMessage(version, BitcoinProtocol.this, magic, in);
+			}
+		});
 	}
 	
 	private void registerMessageHandlers() {
 		super.registerMessageHandler("version", new VersionMessageHandler());
+		super.registerMessageHandler("verack", new VerackMessageHandler());
+		super.registerMessageHandler("addr", new AddressMessageHandler());
 	}
 	
 }

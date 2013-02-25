@@ -21,37 +21,43 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.network.bitcoin.message;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
+import java.nio.ByteBuffer;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinPeer;
+import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
+import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
 
-import com.raphfrk.bitcoin.bcnode.log.LogManager;
-import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinP2PManager;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException, InterruptedException {
-		Security.addProvider(new BouncyCastleProvider());
-		LogManager.init();
-		
-		BitcoinP2PManager manager = new BitcoinP2PManager(16);
-		
-		//manager.connect(new InetSocketAddress("bitseed.xf2.org", 8333), false);
-		manager.connect(new InetSocketAddress("seed.bitcoin.sipa.be", 8333));
-		//manager.connect(new InetSocketAddress("localhost", 8333), false);
-		
-		manager.start();
-		
-		System.in.read();
-
-		manager.interrupt();
-		
-		manager.join();
+public class GetAddressMessage extends BitcoinMessage<GetAddressMessage> {
+	
+	public GetAddressMessage(Protocol<BitcoinPeer> protocol) {
+		super(protocol);
 	}
+	
+	public GetAddressMessage(Protocol<BitcoinPeer> protocol, int magic, ByteBuffer buf) throws IOException {
+		super(protocol);
+	}
+	
+	@Override
+	public String getCommand() {
+		return "getaddr";
+	}
+
+	@Override
+	public void put(int version, ByteBuffer buf) {
+	}
+
+	@Override
+	public int getLength(int version) {
+		return 0;
+	}
+
+	@Override
+	protected String getPayloadString() {
+		return new StringGenerator()
+			.done();
+	}
+
 }

@@ -25,31 +25,46 @@ package com.raphfrk.bitcoin.bcnode.network.p2p;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.util.TimerTask;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import com.raphfrk.bitcoin.bcnode.config.Config;
 import com.raphfrk.bitcoin.bcnode.log.LogManager;
+import com.raphfrk.bitcoin.bcnode.network.address.AddressStatus;
 import com.raphfrk.bitcoin.bcnode.network.message.Message;
 import com.raphfrk.bitcoin.bcnode.network.message.handler.HandshakeMessageHandler;
 import com.raphfrk.bitcoin.bcnode.network.message.handler.MessageHandler;
 import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
-import com.raphfrk.bitcoin.bcnode.util.CryptUtils;
+import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
 
 public abstract class Peer<T extends Protocol<?>> {
 	
 	private static int localBufferSize = Config.PEER_BUFFER_SIZE.get();
+	private static int connectTimeout = Config.CONNECT_TIMEOUT.get();
+	private final static ScheduledExecutorService timer = new ScheduledThreadPoolExecutor(1);
 	
 	private final SocketChannel channel;
+	private final InetSocketAddress remoteAddress;
+	private final boolean outgoing;
+	private final InetSocketAddress addr;
 	private final P2PManager manager;
 	private final Runnable channelConnectRunnable = new ChannelConnectRunnable();
 	private final Runnable channelReadRunnable = new ChannelReadRunnable();
 	private final Runnable channelWriteRunnable = new ChannelWriteRunnable();
+	private final Runnable queueRunnable = new QueueRunnable();
+	private final Runnable disconnectRunnable = new DisconnectRunnable(true);
+	private final Runnable disconnectRunnableWithoutRemoval = new DisconnectRunnable(false);
+	private final ConnectTimeoutTask connectTimeoutTask = new ConnectTimeoutTask();
+	private final HandshakeTimeoutTask handshakeTimeoutTask = new HandshakeTimeoutTask();
 	private final ByteBuffer localReadBuffer;
 	private ByteBuffer readBuffer;
 	private final ConcurrentLinkedQueue<Message<?>> sendQueue = new ConcurrentLinkedQueue<Message<?>>();
@@ -60,25 +75,25 @@ public abstract class Peer<T extends Protocol<?>> {
 	private final int magicValue;
 	private final T protocol;
 	private final long id;
-	private final AtomicBoolean keyRegistered;
-	private final AtomicInteger keyOps;
-	private final AtomicBoolean reading;
-	private final AtomicBoolean writing;
 	private final AtomicBoolean connected;
-	private SelectionKey key;
+	private final AtomicBoolean writePending = new AtomicBoolean(false);
+	private final AtomicBoolean running = new AtomicBoolean(false);
+	private final AtomicBoolean handshakeComplete = new AtomicBoolean(false);
+	private final ConcurrentLinkedQueue<Runnable> taskQueue = new ConcurrentLinkedQueue<Runnable>();
 	
-	public Peer(SocketChannel channel, P2PManager manager) throws IOException {
-		this(channel, null, manager);
+	private final SelectionKey key;
+	
+	public Peer(long id, SocketChannel channel, P2PManager manager) throws IOException {
+		this(id, channel, null, manager);
 	}
 	
-	public Peer(InetSocketAddress addr, P2PManager manager) throws IOException {
-		this(null, addr, manager);
+	public Peer(long id, InetSocketAddress addr, P2PManager manager) throws IOException {
+		this(id, null, addr, manager);
 	}
 	
 	@SuppressWarnings("unchecked")
-	public Peer(SocketChannel channel, InetSocketAddress addr, P2PManager manager) throws IOException {
-		this.id = CryptUtils.getPseudoRandomLong();
-		this.keyRegistered = new AtomicBoolean(false);
+	public Peer(long id, SocketChannel channel, InetSocketAddress addr, P2PManager manager) throws IOException {
+		this.id = id;
 		this.localReadBuffer = ByteBuffer.allocateDirect(localBufferSize);
 		this.readBuffer = localReadBuffer;
 		this.localWriteBuffer = ByteBuffer.allocateDirect(localBufferSize);
@@ -87,150 +102,268 @@ public abstract class Peer<T extends Protocol<?>> {
 		this.magicValue = manager.getMagicValue();
 		this.protocol = (T) manager.getProtocol();
 		this.version = 0;
-		this.keyOps = new AtomicInteger(0);
-		this.reading = new AtomicBoolean(false);
-		this.writing = new AtomicBoolean(false);
 		this.closed = new AtomicBoolean(false);
 		this.connected = new AtomicBoolean(false);
+		this.addr = addr;
 		if (channel != null) {
 			this.channel = channel;
-			this.channel.configureBlocking(false);
+			this.outgoing = false;
 		} else {
 			this.channel = SocketChannel.open();
-			this.channel.configureBlocking(false);
+			this.outgoing = true;
+		}
+		this.channel.configureBlocking(false);
+		if (addr != null) {
+			this.remoteAddress = addr;
+		} else {
+			this.remoteAddress = (InetSocketAddress) this.channel.getRemoteAddress();
+		}
+		key = registerWithChannel();
+	}
+	
+	protected void start() throws IOException {
+		if (outgoing) {
 			this.channel.connect(addr);
 		}
-		setKeyOp(SelectionKey.OP_CONNECT);
-		this.manager.addPeer(this);
+		timer.schedule(connectTimeoutTask, connectTimeout, TimeUnit.SECONDS);
+		timer.schedule(handshakeTimeoutTask, connectTimeout * 2, TimeUnit.SECONDS);
 	}
-
+	
+	protected void cancelStart() {
+		disconnect(false);
+	}
+	
+	private SelectionKey registerWithChannel() throws ClosedChannelException {
+		this.manager.readLockSelector();
+		try {
+			return this.channel.register(manager.getSelector(), SelectionKey.OP_CONNECT, this);			
+		} finally {
+			this.manager.readUnlockSelector();
+		}
+	}
+	
+	private void setKeyInterestOps(int set) {
+		updateKeyInterestOps(set, 0);
+	}
+	
+	public void clearKeyInterestOps() {
+		updateKeyInterestOps(0, -1);
+	}
+	
+	private void updateKeyInterestOps(int set, int clear) {
+		if ((set & clear) != 0) {
+			throw new IllegalArgumentException("Set and clear may not refer to the same bits");
+		}
+		this.manager.readLockSelector();
+		try {
+			if (this.key.isValid()) {
+				int oldOps = this.key.interestOps();
+				this.key.interestOps((oldOps | set) & (~clear));
+			}
+		} finally {
+			this.manager.readUnlockSelector();
+		}
+	}
+	
+	public void disconnect() {
+		disconnect(true);
+	}
+	
+	private void disconnect(boolean removePeer) {
+		if (!removePeer) {
+			this.manager.notifyAsyncOp(disconnectRunnableWithoutRemoval);
+		} else {
+			this.manager.notifyAsyncOp(disconnectRunnable);
+		}
+	}
+	
+	public void notifyHandshakeComplete() {
+		handshakeComplete.set(true);
+	}
+	
 	public void setPeerProtocolVersion(int version) {
 		this.version = version;
 	}
 	
-	public void notifyConnect() {
-		updateKeyOps(0, SelectionKey.OP_CONNECT, false);
-		manager.submitTask(channelConnectRunnable);
+	public void notifyKeyOpDone() {
+		if (writePending.get() || !sendQueue.isEmpty()) {
+			setKeyInterestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+		} else {
+			setKeyInterestOps(SelectionKey.OP_READ);
+		}
 	}
 	
-	public void notifyReadable() {
-		if (isKeyOpSet(SelectionKey.OP_READ) && connected.get()) {
-			if (reading.compareAndSet(false, true)) {
-				updateKeyOps(0, SelectionKey.OP_READ, false);
-				manager.submitTask(channelReadRunnable);
+	public void notifyOps() {
+		manager.checkThread();
+		if (key.isValid()) {
+			if (key.isConnectable()) {
+				notifyConnect();
+			} else if (key.isReadable()) {
+				notifyReadable();
+			} else if (key.isWritable()) {
+				notifyWritable();
+			} else if (!sendQueue.isEmpty()) {
+				notifyKeyOpDone();
 			}
 		}
 	}
 	
-	public void notifyWritable() {
-		notifyWritable(false);
+	public void submitAsyncTask(final Runnable task) {
+		manager.notifyAsyncOp(new Runnable() {
+			@Override
+			public void run() {
+				submitTask(task);
+			}
+		});
+		manager.getSelector().wakeup();
 	}
 	
-	public void notifyWritable(boolean force) {
-		if ((isKeyOpSet(SelectionKey.OP_WRITE) || force) && connected.get()) {
-			if (writing.compareAndSet(false, true)) {
-				updateKeyOps(0, SelectionKey.OP_WRITE, false);
-				manager.submitTask(channelWriteRunnable);
-			}
+	public void submitTask(Runnable task) {
+		manager.checkThread();
+		taskQueue.add(task);
+		if (running.compareAndSet(false, true)) {
+			clearKeyInterestOps();
+			manager.submitTask(queueRunnable);
 		}
 	}
 	
+	private void notifyConnect() {
+		submitTask(channelConnectRunnable);
+	}
+	
+	private void notifyReadable() {
+		if (connected.get()) {
+			submitTask(channelReadRunnable);
+		} else {
+			throw new IllegalStateException("Readable event triggereed before connect");
+		}
+	}
+	
+	private void notifyWritable() {
+		if (connected.get()) {
+			submitTask(channelWriteRunnable);
+		} else {
+			throw new IllegalStateException("Readable event triggereed before connect");
+		}
+	}
+
+	/**
+	 * Sends a message to this peer
+	 * 
+	 * @param message
+	 */
 	public void sendMessage(Message<?> message) {
 		sendQueue.add(message);
-		notifyWritable(true);
+		submitAsyncTask(channelWriteRunnable);
 	}
 	
+	/**
+	 * Gets the manager associated with this peer
+	 * 
+	 * @return
+	 */
 	public P2PManager getManager() {
 		return manager;
 	}
 	
+	/**
+	 * Gets the protocol the peer is using
+	 * 
+	 * @return
+	 */
 	public T getProtocol() {
 		return protocol;
 	}
 	
+	/**
+	 * Gets the version of the connection
+	 * 
+	 * @return
+	 */
 	public int getVersion() {
 		return version;
 	}
 	
+	/**
+	 * Gets the local id assigned to this peer
+	 * 
+	 * @return
+	 */
 	public long getId() {
 		return id;
 	}
-	
-	private void clearKeyOp(int op) {
-		updateKeyOps(0, op, true);
-	}
-	
-	private void setKeyOp(int op) {
-		updateKeyOps(op, 0, true);
-	}
-	
-	private void updateKeyOps(int opSet, int opClear, boolean queue) {
-		if ((opSet & opClear) != 0) {
-			throw new IllegalArgumentException("The bits referred to by opSet and opClear may not overlap");
-		}
-		boolean success = false;
-		while (!success) {
-			int oldValue = keyOps.get();
-			int newValue = (oldValue | (opSet)) & (~opClear);
-			success = keyOps.compareAndSet(oldValue, newValue);
-			if (success & oldValue != newValue) {
-				if (queue) {
-					manager.keyDirtyNotify(this);
-				} else {
-					refreshKeyOp();
-				}
-			}
-		}
+
+	public InetSocketAddress getRemoteAddress() {
+		return remoteAddress;
 	}
 
-	public boolean isKeyOpSet(int op) {
-		return (op & keyOps.get()) != 0;
+	public InetSocketAddress getLocalAddress() {
+		return manager.getLocalAddress();
 	}
 	
-	public void refreshKeyOp() {
-		manager.checkThread();
-		if (this.keyRegistered.compareAndSet(false, true)) {
-			if (key != null) {
-				throw new IllegalStateException("Selection key may only be set once");
-			}
-			try {
-				key = channel.register(manager.getSelector(), keyOps.get(), this);
-			} catch (ClosedChannelException e) {
-				closeChannel(CloseReason.KEY_REGISTRATION);
-			}	
-		}
-		if (key == null) {
-			throw new IllegalStateException("Selection key refreshed before it was set");
-		}
-		key.interestOps(keyOps.get());
+	public boolean isClosed() {
+		return closed.get();
 	}
 
-	protected void closeChannelFinal() {
-		manager.checkThread();
-		if (channel != null) {
-			try {
-				channel.close();
-			} catch (IOException e) {
-			}
-		}
+	private boolean closeChannel(CloseReason reason) {
+		return closeChannel(reason, true);
 	}
 	
-	private void closeChannel(CloseReason reason) {
+	private boolean closeChannel(CloseReason reason, boolean removePeer) {
 		if (closed.compareAndSet(false, true)) {
 			onClosed(reason);
-			manager.removePeer(this);
+			if (reason == CloseReason.CONNECT || reason == CloseReason.HANDSHAKE) {
+				manager.getAddressStore().notify(getRemoteAddress(), AddressStatus.CONNECT_FAIL);
+			}
+			if (key.isValid()) {
+				key.cancel();
+			}
+			if (removePeer) {
+				manager.removePeer(this, reason.getString());
+			}
+			return true;
+		}
+		return false;
+	}
+
+	public abstract void onConnectFailure();
+	
+	public abstract boolean onConnect();
+
+	public abstract void onClosed(CloseReason reason);
+	
+	public abstract void onReceived(Message<?> message);
+	
+	public static void shutdownTimer() throws InterruptedException {
+		timer.shutdownNow();
+		if (!timer.awaitTermination(1, TimeUnit.SECONDS)) {
+			throw new IllegalStateException();
 		}
 	}
 	
-	private class ChannelReadRunnable extends ExceptionCatchRunnable {
+	@Override
+	public String toString() {
+		return new StringGenerator()
+			.add("Peer", getRemoteAddress().toString())
+			.done();
+			
+	}
+	
+	private class ChannelReadRunnable implements Runnable {
 		@SuppressWarnings({ "unchecked", "rawtypes" })
 		@Override
-		public void wrappedRun() {
+		public void run() {
 			boolean eof = false;
 			try {
+				
 				eof |= drainChannel(readBuffer);
 
+				readBuffer.flip();
+				
 				boolean messageAvailable = protocol.containsFullMessage(version, magicValue, readBuffer);
+				
+				readBuffer.compact();
+
 				if (readBuffer.remaining() == 0 && !messageAvailable) {
 					eof |= expandBuffer() || drainChannel(readBuffer);
 				}
@@ -239,7 +372,6 @@ public abstract class Peer<T extends Protocol<?>> {
 				do {
 					message = protocol.decodeMessage(version, magicValue, readBuffer);
 					if (message != null) {
-						System.out.println("Message received, " + message);
 						MessageHandler handler = protocol.getHandler(message.getCommand());
 						if (version == 0 && !(handler instanceof HandshakeMessageHandler)) {
 							closeChannel(CloseReason.HANDSHAKE);
@@ -257,11 +389,10 @@ public abstract class Peer<T extends Protocol<?>> {
 			} catch (IOException ioe) {
 				closeChannel(CloseReason.READ);
 			} finally {
-				if (eof && readBuffer.position() == 0) {
-					closeChannel(CloseReason.READ);
+				if (eof) {
+					closeChannel(CloseReason.READ_EOF);
 				} else {
-					setKeyOp(SelectionKey.OP_READ);
-					reading.compareAndSet(true, false);
+					Peer.this.notifyKeyOpDone();
 				}
 			}
 		}
@@ -298,16 +429,10 @@ public abstract class Peer<T extends Protocol<?>> {
 		
 	}
 	
-	public abstract boolean onConnect();
-
-	public abstract void onClosed(CloseReason reason);
-	
-	public abstract void onReceived(Message<?> message);
-	
-	private class ChannelWriteRunnable extends ExceptionCatchRunnable {
+	private class ChannelWriteRunnable implements Runnable {
 
 		@Override
-		public void wrappedRun() {
+		public void run() {
 			try {
 				flushMessageQueue(writeBuffer);
 				
@@ -338,41 +463,37 @@ public abstract class Peer<T extends Protocol<?>> {
 			} catch (IOException ioe) {
 				closeChannel(CloseReason.WRITE);
 			} finally {
-				boolean remaining = writeBuffer.remaining() > 0;
-				writing.compareAndSet(true, false);
-				if (remaining || !sendQueue.isEmpty()) {
-					setKeyOp(SelectionKey.OP_WRITE);
-				}
+				writePending.set(writeBuffer.remaining() > 0);
+				notifyKeyOpDone();
 			}
 		}
 
 		private boolean flushMessageQueue(ByteBuffer buffer) {
-			boolean success = true;
+			int messagesWritten = 0;
+			boolean queueEmpty = true;
 			Message<?> message;
 			while ((message = sendQueue.peek()) != null) {
+				queueEmpty = false;
 				int length = message.getLength(version);
 				if (buffer.remaining() < 24 + length) {
-					success = false;
 					break;
 				}
 				message = sendQueue.poll();
 				if (protocol.encodeMessage(version, message, buffer) == Protocol.SUCCESS) {
-					System.out.println("Encoded " + message);
-					success = true;
+					messagesWritten++;
 				} else {
 					closeChannel(CloseReason.WRITE);
 					throw new IllegalStateException("Message length calculation error");
 				}
 			}
-			return success;
+			return queueEmpty || (messagesWritten > 0);
 		}
-		
+
 		private boolean attemptWrite() throws IOException {
 			try {
 				if (writeBuffer.remaining() > 0) {
 					channel.write(writeBuffer);
 					if (writeBuffer.remaining() > 0) {
-						setKeyOp(SelectionKey.OP_WRITE);
 						return false;
 					}
 				}
@@ -381,7 +502,7 @@ public abstract class Peer<T extends Protocol<?>> {
 			}
 			return true;
 		}
-		
+
 		private void expandBuffer() {
 			if (writeBuffer != localWriteBuffer) {
 				closeChannel(CloseReason.WRITE);
@@ -403,45 +524,112 @@ public abstract class Peer<T extends Protocol<?>> {
 		}
 	}
 	
-	private class ChannelConnectRunnable extends ExceptionCatchRunnable {
-		public void wrappedRun() {
+	private class DisconnectRunnable implements Runnable {
+		
+		private final boolean removePeer;
+		
+		public DisconnectRunnable(boolean removePeer) {
+			this.removePeer = removePeer;
+		}
+		
+		@Override
+		public void run() {
+			closeChannel(CloseReason.LOCAL_DISCONNECT, removePeer);
+		}
+	}
+
+	private class ChannelConnectRunnable implements Runnable {
+		public void run() {
+			if (connected.get()) {
+				return;
+			}
 			try {
-				if (!channel.finishConnect()) {
+				boolean success = channel.finishConnect();
+				if (!success) {
 					closeChannel(CloseReason.CONNECT);
+					return;
 				}
+			} catch (ClosedChannelException | SocketException e) {
+				e.printStackTrace();
+				closeChannel(CloseReason.CONNECT);
+				return;
 			} catch (IOException e) {
+				e.printStackTrace();
 				closeChannel(CloseReason.CONNECT);
 				return;
 			}
-			if (!connected.compareAndSet(false, true)) {
-				throw new IllegalStateException("Peer channel reported connected more than once");
-			}
+			connected.compareAndSet(false, true);
 			if (onConnect()) {
-				updateKeyOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE, SelectionKey.OP_CONNECT, true);
+				LogManager.log("Connection established to " + remoteAddress);
+				Peer.this.notifyKeyOpDone();
 			} else {
 				closeChannel(CloseReason.CONNECT);
 			}
-			
+		}
+	}
+
+	private class ConnectTimeoutTask extends TimerTask {
+		@Override
+		public void run() {
+			submitAsyncTask(channelConnectRunnable);
 		}
 	}
 	
-	private abstract class ExceptionCatchRunnable implements Runnable {
+	private class HandshakeTimeoutTask extends TimerTask {
+		@Override
+		public void run() {
+			submitAsyncTask(new Runnable() {
+				@Override
+				public void run() {
+					if (!handshakeComplete.get()) {
+						closeChannel(CloseReason.HANDSHAKE);
+					}
+				}
+			});
+		}
+	}
+	
+	private class QueueRunnable implements Runnable {
 
 		@Override
 		public final void run() {
 			try {
-				wrappedRun();
+				while (!closed.get()) {
+					Runnable r;
+					while ((r = taskQueue.poll()) != null  && !closed.get()) {
+						r.run();
+					}
+					running.set(false);
+					if (taskQueue.isEmpty()) {
+						return;
+					}
+					if (closed.get() || !running.compareAndSet(false, true)) {
+						return;
+					}
+				}
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
 		
-		public abstract void wrappedRun();
-		
 	}
 	
 	protected enum CloseReason {
-		CONNECT, READ, WRITE, KEY_REGISTRATION, HANDSHAKE, HANDLER
+		CONNECT, READ, READ_EOF, WRITE, KEY_REGISTRATION, HANDSHAKE, HANDLER, LOCAL_DISCONNECT;
+		
+		public String getString() {
+			switch(this) {
+				case CONNECT: return "Unable to connect to";
+				case READ: return "Unable to read from";
+				case READ_EOF: return "EOF readed for ";
+				case WRITE: return "Unable to write to";
+				case KEY_REGISTRATION: return "Unable to setup connection with";
+				case HANDSHAKE: return "Unable to complete handshake with";
+				case HANDLER: return "Message handler broke connection to";
+				case LOCAL_DISCONNECT: return "Broke connection to";
+				default: return "Connection lost with";
+			}
+		}
 	}
 	
 }

@@ -34,13 +34,19 @@ import com.raphfrk.bitcoin.bcnode.network.p2p.P2PManager;
 import com.raphfrk.bitcoin.bcnode.network.p2p.Peer;
 
 public class BitcoinPeer extends Peer<BitcoinProtocol> {
+	
+	public static long NODE_NETWORK = 1;
 
-	public BitcoinPeer(InetSocketAddress addr, P2PManager manager) throws IOException {
-		super(addr, manager);
+	public BitcoinPeer(long id, InetSocketAddress addr, P2PManager manager) throws IOException {
+		super(id, addr, manager);
 	}
 	
-	public BitcoinPeer(SocketChannel channel, P2PManager manager) throws IOException {
-		super(channel, manager);
+	public BitcoinPeer(long id, SocketChannel channel, P2PManager manager) throws IOException {
+		super(id, channel, manager);
+	}
+	
+	@Override
+	public void onConnectFailure() {
 	}
 
 	@Override
@@ -49,19 +55,22 @@ public class BitcoinPeer extends Peer<BitcoinProtocol> {
 		long localPeerId = getId();
 		BitcoinProtocol protocol = (BitcoinProtocol) getManager().getProtocol();
 		
-		VersionMessage versionMessage = new VersionMessage(protocol, 0L, timestamp, null, null, localPeerId, getProtocol().getClientName(), 0);
+		VersionMessage versionMessage = new VersionMessage(protocol, NODE_NETWORK, timestamp, getRemoteAddress(), null, localPeerId, getProtocol().getClientName(), 0);
 		super.sendMessage(versionMessage);
 		return true;
 	}
 
 	@Override
 	public void onClosed(CloseReason reason) {
-		System.out.println("onClosed called: " + reason);
 	}
 
 	@Override
 	public void onReceived(Message<?> message) {
-		System.out.println("Message received, " + message);
+	}
+	
+	@Override
+	public BitcoinP2PManager getManager() {
+		return (BitcoinP2PManager) super.getManager();
 	}
 
 }

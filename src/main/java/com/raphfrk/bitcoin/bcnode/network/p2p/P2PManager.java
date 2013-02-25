@@ -23,17 +23,14 @@
  */
 package com.raphfrk.bitcoin.bcnode.network.p2p;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.SecureRandom;
 import java.util.Iterator;
-import java.util.Random;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -41,34 +38,102 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.raphfrk.bitcoin.bcnode.log.LogManager;
+import com.raphfrk.bitcoin.bcnode.network.address.AddressStatus;
+import com.raphfrk.bitcoin.bcnode.network.address.AddressStore;
+import com.raphfrk.bitcoin.bcnode.network.elements.NetworkAddress;
 import com.raphfrk.bitcoin.bcnode.network.protocol.Protocol;
+import com.raphfrk.bitcoin.bcnode.util.CryptUtils;
+import com.raphfrk.bitcoin.bcnode.util.LockFile;
 import com.raphfrk.bitcoin.bcnode.util.NamedThreadFactory;
 
-public class P2PManager extends Thread {
+public abstract class P2PManager extends Thread {
 	
 	private final ExecutorService workers = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2 + 1, new NamedThreadFactory("P2P Manager worker thread", false));
-
-	private final ConcurrentLinkedQueue<Peer<?>> closeQueue = new ConcurrentLinkedQueue<Peer<?>>();
-
-	private final ConcurrentLinkedQueue<Peer<?>> keyDirtyQueue = new ConcurrentLinkedQueue<Peer<?>>();
+	/**
+	 * The peerAddresses map is the canonical peer registry
+	 */
+	private final ConcurrentHashMap<InetSocketAddress, Peer<?>> peerAddresses = new ConcurrentHashMap<InetSocketAddress, Peer<?>>();
+	private final ConcurrentHashMap<Long, Peer<?>> peerIdPeerMap = new ConcurrentHashMap<Long, Peer<?>>();
+	private final Set<InetSocketAddress> connectedPeerAddresses = peerAddresses.keySet();
 	
-	private final ConcurrentHashMap<Long, Peer<?>> peers = new ConcurrentHashMap<Long, Peer<?>>();
+	private final ReentrantReadWriteLock selectorGuard = new ReentrantReadWriteLock();
+	
+	private final AddressStore addressStore;
 	
 	private final Selector selector;
 	
 	private final Protocol<?> protocol;
 	
-	public P2PManager(Protocol<?> protocol) throws IOException {
+	private final File dir;
+	
+	private final LockFile lock;
+	
+	private final AtomicReference<InetSocketAddress> localAddress; 
+	
+	private final int maxConnections;
+	private final AtomicInteger activeConnections = new AtomicInteger(0);
+	
+	private final Queue<Runnable> asyncOpQueue = new ConcurrentLinkedQueue<Runnable>();
+	
+	public P2PManager(Protocol<?> protocol, int maxConnections) throws IOException {
+		this(new File("data"), protocol, maxConnections);
+	}
+	
+	public P2PManager(File dir, Protocol<?> protocol, int maxConnections) throws IOException {
+		this.dir = dir;
+		dir.mkdir();
+		this.lock = new LockFile(new File(dir, "lock"));
+		if (!this.lock.lock()) {
+			LogManager.log("Unable to establish lock for directory " + dir);
+			throw new IOException("Unable to establish lock file for directory " + dir);
+		}
 		this.protocol = protocol;
 		selector = SelectorProvider.provider().openSelector();
+		this.maxConnections = maxConnections;
+		this.addressStore = new AddressStore(dir, this);
+		this.localAddress = new AtomicReference<InetSocketAddress>(null);
+		
+		attemptConnectToPeers();
 		LogManager.log("Starting P2P server for " + protocol);
 	}
 	
-	public Peer<?> connect(InetSocketAddress addr) throws IOException {
-		Peer<?> peer = protocol.getPeer(addr, this);
-		return peer;
+	public Peer<?> connect(InetSocketAddress addr) {
+		if (connectedPeerAddresses.contains(addr)) {
+			LogManager.log("Ignoring connect as " + addr + " is already connected");
+			Thread.dumpStack();
+			return null;
+		}
+		try {
+			getAddressStore().notify(addr, AddressStatus.CONNECT_ATTEMPT);
+			long id = CryptUtils.getPseudoRandomLong();
+			Peer<?> peer = protocol.getPeer(id, addr, this);
+			if (peerIdPeerMap.putIfAbsent(id, peer) != null) {
+				throw new IllegalStateException("Random number generator returned two equal peer ids");
+			}
+			if (peerAddresses.putIfAbsent(addr, peer) != null) {
+				peer.cancelStart();
+				LogManager.log("Ignoring connect as " + addr + " is already connected");
+				if (!peerIdPeerMap.remove(id, peer)) {
+					throw new IllegalStateException("Unable to remove peer from peerIdPeerMap");
+				}
+				return null;
+			}
+			activeConnections.incrementAndGet();
+			LogManager.log("Attempting to connect to " + addr);
+			peer.start();
+			return peer;
+		} catch (IOException ioe) {
+			return null;
+		}
+	}
+	
+	public File getDataDirectory() {
+		return dir;
 	}
 	
 	public Protocol<?> getProtocol() {
@@ -80,35 +145,58 @@ public class P2PManager extends Thread {
 	}
 	
 	public Peer<?> getPeer(long id) {
-		return peers.get(id);
+		return peerIdPeerMap.get(id);
 	}
 	
-	protected void addPeer(Peer<?> peer) {
-		Peer<?> oldPeer = peers.put(peer.getId(), peer);
-		if (oldPeer != null) {
-			throw new IllegalStateException("Peer already in peer set");
+	public Peer<?> getPeer(InetSocketAddress addr) {
+		return peerAddresses.get(addr);
+	}
+	
+	public InetSocketAddress getLocalAddress() {
+		return localAddress.get();
+	}
+	
+	public AddressStore getAddressStore() {
+		return addressStore;
+	}
+	
+	public void notifyNewAddress(NetworkAddress addr) {
+		InetSocketAddress socketAddr = addr.getInetSocketAddress();
+		if (socketAddr != null && this.activeConnections.get() < this.maxConnections && !this.connectedPeerAddresses.contains(addr)) {
+			connect(socketAddr);
 		}
-		LogManager.log("Added peer to peer set, " + peer);
 	}
 	
-	protected void removePeer(Peer<?> peer) {
-		boolean removed = peers.remove(peer.getId(), peer);
+	public void notifyAsyncOp(Runnable r) {
+		asyncOpQueue.add(r);
+		selector.wakeup();
+	}
+	
+	protected void removePeer(Peer<?> peer, String reason) {
+		boolean removed = peerAddresses.remove(peer.getRemoteAddress(), peer);
 		if (!removed) {
 			throw new IllegalStateException("Failed to successfully remove peer from peer set");
 		}
-		LogManager.log("Removed peer from peer set, " + peer);
-		queueForClose(peer);
-		selector.wakeup();
+		if (!peerIdPeerMap.remove(peer.getId(), peer)) {
+			throw new IllegalStateException("Failed to successfully remove peer from id to peer set");
+		}
+		activeConnections.decrementAndGet();
+		LogManager.log(reason + " " + peer + " (" + activeConnections.get() + ")");
+		attemptConnectToPeers();
 	}
 	
-	protected void queueForClose(Peer<?> peer) {
-		closeQueue.add(peer);
-		selector.wakeup();
+	private void attemptConnectToPeers() {
+		attemptConnectToPeers(maxConnections - activeConnections.get());
 	}
 	
-	protected void keyDirtyNotify(Peer<?> peer) {
-		keyDirtyQueue.add(peer);
-		selector.wakeup();
+	private void attemptConnectToPeers(int limit) {
+		InetSocketAddress[] socketAddr;
+		socketAddr = addressStore.getAddress(connectedPeerAddresses, limit);
+		for (int i = 0; i < limit; i++) {
+			if (socketAddr[i] != null) {
+				connect(socketAddr[i]);
+			}
+		}
 	}
 	
 	public Selector getSelector() {
@@ -119,9 +207,30 @@ public class P2PManager extends Thread {
 		return workers.submit(task);
 	}
 	
+	protected void onShutdown() {
+		addressStore.save();
+	}
+	
 	public void checkThread() {
 		if (Thread.currentThread() != this) {
 			throw new IllegalStateException("Check thread called from " + Thread.currentThread() + ", checkThread() can only be called from the P2P Manager thread");
+		}
+	}
+	
+	public void readLockSelector() {
+		this.selectorGuard.readLock().lock();
+		this.selector.wakeup();
+	}
+	
+	public void readUnlockSelector() {
+		this.selectorGuard.readLock().unlock();
+	}
+	
+	public void selectorGuard() {
+		try {
+			this.selectorGuard.writeLock().lock();
+		} finally {
+			this.selectorGuard.writeLock().unlock();
 		}
 	}
 	
@@ -129,9 +238,14 @@ public class P2PManager extends Thread {
 		while (!isInterrupted()) {
 			int selectedKeys;
 			try {
+				selectorGuard();
 				selectedKeys = selector.select();
 			} catch (IOException e) {
 				throw new IllegalStateException("P2P Manager master thread selector thread an exception");
+			}
+			Runnable r;
+			while ((r = asyncOpQueue.poll()) != null) {
+				r.run();
 			}
 			if (selectedKeys > 0) {
 				Set<SelectionKey> keys = selector.selectedKeys();
@@ -140,30 +254,13 @@ public class P2PManager extends Thread {
 					SelectionKey key = itr.next();
 					itr.remove();
 					Peer<?> peer = (Peer<?>) key.attachment();
-					try {
-						if (key.isConnectable()) {
-							peer.notifyConnect();
-						}
-						if (key.isReadable()) {
-							peer.notifyReadable();
-							continue;
-						}
-						if (key.isWritable()) {
-							peer.notifyWritable();
-						}
-					} catch (CancelledKeyException c) {
-						System.out.println(c.getMessage());
-						c.printStackTrace();
-					}
+					peer.notifyOps();
 				}
 			}
-			Peer<?> peer;
-			while ((peer = keyDirtyQueue.poll()) != null) {
-				peer.refreshKeyOp();
-			}
-			while ((peer = closeQueue.poll()) != null) {
-				peer.closeChannelFinal();
-			}
+		}
+		try {
+			Peer.shutdownTimer();
+		} catch (InterruptedException e) {
 		}
 		workers.shutdown();
 		try {
@@ -174,6 +271,8 @@ public class P2PManager extends Thread {
 			}
 		} catch (InterruptedException e) {
 		}
+		onShutdown();
+		lock.unlock();
 	}
 	
 }

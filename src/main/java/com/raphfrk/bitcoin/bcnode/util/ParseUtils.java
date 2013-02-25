@@ -24,6 +24,8 @@
 package com.raphfrk.bitcoin.bcnode.util;
 
 import java.nio.ByteBuffer;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
 
 import com.raphfrk.bitcoin.bcnode.network.message.Message;
 
@@ -161,6 +163,10 @@ public class ParseUtils {
 			return sb.toString();
 		}
 		return prefix;
+	}
+	
+	public static String timestampToString(long timestamp) {
+		return new SimpleDateFormat("dd/MM/yyyy").format(new Date(timestamp * 1000L));
 	}
 	
 }

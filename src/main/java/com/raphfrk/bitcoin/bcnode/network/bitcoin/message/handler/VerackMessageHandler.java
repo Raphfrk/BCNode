@@ -21,37 +21,22 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.network.bitcoin.message.handler;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.message.VerackMessage;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinPeer;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.protocol.BitcoinProtocol;
+import com.raphfrk.bitcoin.bcnode.network.message.handler.HandshakeMessageHandler;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
-import com.raphfrk.bitcoin.bcnode.log.LogManager;
-import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinP2PManager;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException, InterruptedException {
-		Security.addProvider(new BouncyCastleProvider());
-		LogManager.init();
-		
-		BitcoinP2PManager manager = new BitcoinP2PManager(16);
-		
-		//manager.connect(new InetSocketAddress("bitseed.xf2.org", 8333), false);
-		manager.connect(new InetSocketAddress("seed.bitcoin.sipa.be", 8333));
-		//manager.connect(new InetSocketAddress("localhost", 8333), false);
-		
-		manager.start();
-		
-		System.in.read();
-
-		manager.interrupt();
-		
-		manager.join();
+public class VerackMessageHandler implements HandshakeMessageHandler<VerackMessage, BitcoinPeer, BitcoinProtocol> {
+	
+	@Override
+	public boolean handle(VerackMessage message, BitcoinPeer peer) {
+		if (peer.getVersion() == 0) {
+			return false;
+		}
+		peer.notifyHandshakeComplete();
+		return true;
 	}
+	
 }

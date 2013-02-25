@@ -48,6 +48,9 @@ public class Config {
 	private static final DummyConfigSetup NETWORK_SETTINGS = new DummyConfigSetup("Network Settings");
 	public static final ConfigSetup<Long> MAX_MESSAGE_SIZE = new LongConfigSetup("max_message_size", 10485760L, "Maximum message size in bytes");
 	public static final ConfigSetup<Integer> PEER_BUFFER_SIZE = new IntConfigSetup("peer_buffer_size", 8192, "The size of the standard read/write buffers in bytes");
+	public static final ConfigSetup<Integer> FAIL_RETRY_TIMEOUT = new IntConfigSetup("fail_retry_timeout", 60 * 15, "The time in seconds to wait before attempting to reconnect to a node");
+	public static final ConfigSetup<Integer> CONNECT_TIMEOUT = new IntConfigSetup("connect_timeout", 15, "The time in seconds before connect attempts are considered to have timed out");
+	public static final ConfigSetup<Integer> NETWORK_NOTIFY_PENALTY = new IntConfigSetup("network_notify_penalty", 2 * 60 * 60, "The time to adjust the timestamp for forwarding addresses");
 	
 	private static final DummyConfigSetup LINE3 = new DummyConfigSetup("");
 	private static final DummyConfigSetup LOG_SETTINGS = new DummyConfigSetup("Log Settings");

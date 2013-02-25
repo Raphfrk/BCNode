@@ -250,9 +250,9 @@ public abstract class Protocol<T extends Peer<?>> {
 		return "BCNode";
 	}
 
-	public abstract T getPeer(SocketChannel channel, P2PManager manager) throws IOException;
+	public abstract T getPeer(long id, SocketChannel channel, P2PManager manager) throws IOException;
 
-	public abstract T getPeer(InetSocketAddress addr, P2PManager manager) throws IOException;
+	public abstract T getPeer(long id, InetSocketAddress addr, P2PManager manager) throws IOException;
 	
 	protected void registerMessageDecoder(String command, MessageDecoder decoder) {
 		decoders.put(command, decoder);

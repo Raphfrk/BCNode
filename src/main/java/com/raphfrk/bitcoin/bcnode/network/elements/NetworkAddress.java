@@ -30,16 +30,28 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import com.raphfrk.bitcoin.bcnode.util.ComparableByteArray;
 import com.raphfrk.bitcoin.bcnode.util.ParseUtils;
 import com.raphfrk.bitcoin.bcnode.util.StringGenerator;
 
-public class NetworkAddress implements MessageElement<NetworkAddress> {
+public class NetworkAddress implements MessageElement<NetworkAddress>, Comparable<NetworkAddress> {
 	
 	private final boolean versionMessage;
 	private final int timestamp;
 	private final long services;
 	private final byte[] addr;
 	private final int port;
+	private final int hash;
+	
+	public NetworkAddress(NetworkAddress addr, int newTimestamp) {
+		this.versionMessage = addr.versionMessage;
+		this.services = addr.services;
+		this.addr = addr.addr;
+		this.port = addr.port;
+		this.hash = addr.hash;
+		
+		this.timestamp = newTimestamp;
+	}
 	
 	public NetworkAddress(boolean versionMessage, long services, InetSocketAddress address) {
 		this(true, 0, services, address);
@@ -58,6 +70,7 @@ public class NetworkAddress implements MessageElement<NetworkAddress> {
 		this.services = services;
 		this.addr = addrToBytes(address);
 		this.port = address == null ? 0 : address.getPort();
+		this.hash = hashCodeRaw();
 	}
 	
 	public NetworkAddress(int version, ByteBuffer buf) throws IOException {
@@ -77,6 +90,11 @@ public class NetworkAddress implements MessageElement<NetworkAddress> {
 		buf.get(addr);
 		port = buf.getShort() & 0xFFFF;
 		this.versionMessage = versionMessage;
+		this.hash = hashCodeRaw();
+	}
+	
+	public int getTimestamp() {
+		return timestamp;
 	}
 	
 	public InetSocketAddress getInetSocketAddress() {
@@ -128,10 +146,10 @@ public class NetworkAddress implements MessageElement<NetworkAddress> {
 		if (inetBytes.length == 4) {
 			bytes[10] = (byte) 0xFF;
 			bytes[11] = (byte) 0xFF;
-			bytes[12] = (byte) (inetBytes[0] >> 24);
-			bytes[13] = (byte) (inetBytes[1] >> 16);
-			bytes[14] = (byte) (inetBytes[2] >> 8);
-			bytes[15] = (byte) (inetBytes[3] >> 0);
+			bytes[12] = (byte) inetBytes[0];
+			bytes[13] = (byte) inetBytes[1];
+			bytes[14] = (byte) inetBytes[2];
+			bytes[15] = (byte) inetBytes[3];
 		} else if (inetBytes.length == 16) {
 			return inetBytes;
 		}
@@ -163,6 +181,12 @@ public class NetworkAddress implements MessageElement<NetworkAddress> {
 		return true;
 	}
 	
+	private int hashCodeRaw() {
+		int h = ComparableByteArray.hash(addr);
+		h += (h << 5) + port;
+		return h;
+	}
+	
 	public String toString() {
 		return new StringGenerator(true)
 			.add("VersionMessage", versionMessage)
@@ -171,6 +195,40 @@ public class NetworkAddress implements MessageElement<NetworkAddress> {
 			.add("Address", getNetworkAddress())
 			.add("Port", port)
 			.done();
+	}
+	
+	@Override
+	public int hashCode() {
+		return hash;
+	}
+	
+	@Override
+	public boolean equals(Object o) {
+		if (o == this) {
+			return true;
+		} if (!(o instanceof NetworkAddress)) {
+			return false;
+		} else {
+			NetworkAddress other = ((NetworkAddress) o);
+			if (hash != other.hash) {
+				return false;
+			}
+			if (port != other.port) {
+				return false;
+			}
+			return ComparableByteArray.compareArrays(addr, other.addr) == 0;
+		}
+	}
+
+	@Override
+	public int compareTo(NetworkAddress o) {
+		if (hash != o.hash) {
+			return hash - o.hash;
+		}
+		if (port != o.port) {
+			return port - o.port;
+		}
+		return ComparableByteArray.compareArrays(addr, o.addr);
 	}
 
 }

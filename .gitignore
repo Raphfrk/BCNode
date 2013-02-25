@@ -6,6 +6,7 @@ out
 target
 *.class
 logs
+data
 
 MANIFEST.MF
 dependency-reduced-pom.xml

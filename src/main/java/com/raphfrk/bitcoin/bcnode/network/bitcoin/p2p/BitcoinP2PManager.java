@@ -21,37 +21,17 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.raphfrk.bitcoin.bcnode;
+package com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import com.raphfrk.bitcoin.bcnode.network.bitcoin.protocol.BitcoinProtocol;
+import com.raphfrk.bitcoin.bcnode.network.p2p.P2PManager;
 
-import com.raphfrk.bitcoin.bcnode.log.LogManager;
-import com.raphfrk.bitcoin.bcnode.network.bitcoin.p2p.BitcoinP2PManager;
-
-public class BCNode {
-	public static void main( String[] args ) throws NoSuchAlgorithmException, NoSuchProviderException, UnknownHostException, IOException, InterruptedException {
-		Security.addProvider(new BouncyCastleProvider());
-		LogManager.init();
-		
-		BitcoinP2PManager manager = new BitcoinP2PManager(16);
-		
-		//manager.connect(new InetSocketAddress("bitseed.xf2.org", 8333), false);
-		manager.connect(new InetSocketAddress("seed.bitcoin.sipa.be", 8333));
-		//manager.connect(new InetSocketAddress("localhost", 8333), false);
-		
-		manager.start();
-		
-		System.in.read();
-
-		manager.interrupt();
-		
-		manager.join();
+public class BitcoinP2PManager extends P2PManager {
+	
+	public BitcoinP2PManager(int maxConnections) throws IOException {
+		super(new BitcoinProtocol(), maxConnections);
 	}
+	
 }
